@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SecureBank ATM Terminal</title>
+  <link rel="stylesheet" href="main-style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       ATM OUTER SHELL
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="atm-shell">
+
+    <!-- Bank brand header -->
+    <header class="atm-header">
+      <div class="bank-logo">
+        <span class="bank-icon">🏦</span>
+        <div class="bank-name-group">
+          <span class="bank-name">SecureBank</span>
+          <span class="bank-tagline">Trusted Since 1987</span>
+        </div>
+      </div>
+      <div class="atm-status">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">ONLINE</span>
+      </div>
+    </header>
+
+    <!-- ── SCREEN ───────────────────────────────────────────── -->
+    <main class="atm-screen" id="atmScreen">
+
+      <!-- SESSION TIMER (visible after login) -->
+      <div class="session-timer hidden" id="sessionTimer">
+        <span>Session: </span><span id="timerDisplay">02:00</span>
+      </div>
+
+      <!-- ====================================================
+           VIEW: WELCOME / CARD INSERT
+           ==================================================== -->
+      <section class="view active" id="view-welcome">
+        <div class="welcome-content">
+          <div class="atm-animation">
+            <div class="card-slot-visual">
+              <div class="card-graphic" id="cardGraphic">
+                <span class="card-chip"></span>
+                <span class="card-number-preview">•••• •••• •••• ••••</span>
+              </div>
+            </div>
+          </div>
+          <h1 class="screen-title">Welcome</h1>
+          <p class="screen-subtitle">Please enter your 16-digit card number to begin.</p>
+          <div class="input-group">
+            <label for="cardInput">Card Number</label>
+            <input
+              type="text"
+              id="cardInput"
+              class="atm-input card-input"
+              placeholder="•••• •••• •••• ••••"
+              maxlength="19"
+              inputmode="numeric"
+              autocomplete="off"
+            />
+          </div>
+          <button class="btn btn-primary" id="btnInsertCard">Insert Card</button>
+          <button class="btn btn-ghost" id="btnGoRegister">New Customer? Register Here</button>
+          <button class="btn btn-admin-link" id="btnGoAdmin">Admin Portal</button>
+        </div>
+      </section>
+
+      <!-- ====================================================
+           VIEW: PIN ENTRY
+           ==================================================== -->
+      <section class="view" id="view-pin">
+        <div class="pin-content">
+          <h1 class="screen-title">Enter PIN</h1>
+          <p class="screen-subtitle" id="pinSubtitle">Please enter your PIN. For security, digits are masked.</p>
+          <div class="pin-display" id="pinDots">
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+            <span class="pin-dot"></span>
+          </div>
+          <!-- Hidden real input for keyboard support -->
+          <input
+            type="password"
+            id="pinInput"
+            class="pin-input-hidden"
+            maxlength="6"
+            inputmode="numeric"
+            autocomplete="off"
+          />
+          <!-- Numeric Keypad -->
+          <div class="keypad" id="keypad">
+            <button class="key" data-val="1">1</button>
+            <button class="key" data-val="2">2</button>
+            <button class="key" data-val="3">3</button>
+            <button class="key" data-val="4">4</button>
+            <button class="key" data-val="5">5</button>
+            <button class="key" data-val="6">6</button>
+            <button class="key" data-val="7">7</button>
+            <button class="key" data-val="8">8</button>
+            <button class="key" data-val="9">9</button>
+            <button class="key key-clear" data-val="clear">CLR</button>
+            <button class="key" data-val="0">0</button>
+            <button class="key key-enter" data-val="enter">OK</button>
+          </div>
+          <button class="btn btn-ghost btn-back" id="btnBackFromPin">← Cancel</button>
+        </div>
+      </section>
+
+      <!-- ====================================================
+           VIEW: MAIN MENU
+           ==================================================== -->
+      <section class="view" id="view-menu">
+        <div class="menu-content">
+          <div class="account-summary" id="accountSummary">
+            <span class="holder-name" id="holderName">Account Holder</span>
+            <span class="account-type-badge" id="accountTypeBadge">SAVINGS</span>
+          </div>
+          <h2 class="menu-title">How can we help you today?</h2>
+          <div class="menu-grid">
+            <button class="menu-btn" id="btnBalance">
+              <span class="menu-icon">💰</span>
+              <span>Check Balance</span>
+            </button>
+            <button class="menu-btn" id="btnWithdraw">
+              <span class="menu-icon">💵</span>
+              <span>Withdraw</span>
+            </button>
+            <button class="menu-btn" id="btnDeposit">
+              <span class="menu-icon">📥</span>
+              <span>Deposit Cash</span>
+            </button>
+            <button class="menu-btn" id="btnTransfer">
+              <span class="menu-icon">↔️</span>
+              <span>Transfer</span>
+            </button>
+            <button class="menu-btn" id="btnStatement">
+              <span class="menu-icon">📋</span>
+              <span>Mini Statement</span>
+            </button>
+            <button class="menu-btn" id="btnCheckDeposit">
+              <span class="menu-icon">🏷️</span>
+              <span>Check Deposit</span>
+            </button>
+            <button class="menu-btn" id="btnChangePin">
+              <span class="menu-icon">🔑</span>
+              <span>Change PIN</span>
+            </button>
+            <button class="menu-btn menu-btn-exit" id="btnExit">
+              <span class="menu-icon">⏏</span>
+              <span>Exit / Eject Card</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================
+           VIEW: AMOUNT ENTRY (shared for withdraw/deposit/transfer)
+           ==================================================== -->
+      <section class="view" id="view-amount">
+        <div class="amount-content">
+          <h1 class="screen-title" id="amountTitle">Withdraw Cash</h1>
+          <p class="screen-subtitle" id="amountSubtitle">Enter the amount.</p>
+
+          <!-- Quick amounts (for withdrawals only) -->
+          <div class="quick-amounts hidden" id="quickAmounts">
+            <p class="quick-label">Quick Select:</p>
+            <div class="quick-grid">
+              <button class="quick-btn" data-amount="20">$20</button>
+              <button class="quick-btn" data-amount="40">$40</button>
+              <button class="quick-btn" data-amount="60">$60</button>
+              <button class="quick-btn" data-amount="100">$100</button>
+              <button class="quick-btn" data-amount="200">$200</button>
+              <button class="quick-btn" data-amount="500">$500</button>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="amountInput">Amount ($)</label>
+            <input
+              type="number"
+              id="amountInput"
+              class="atm-input amount-input"
+              placeholder="0.00"
+              min="0.01"
+              step="0.01"
+            />
+          </div>
+
+          <!-- Transfer target field (shown only for transfers) -->
+          <div class="input-group hidden" id="targetCardGroup">
+            <label for="targetCardInput">Recipient Card Number</label>
+            <input
+              type="text"
+              id="targetCardInput"
+              class="atm-input card-input"
+              placeholder="•••• •••• •••• ••••"
+              maxlength="19"
+              inputmode="numeric"
+            />
+          </div>
+
+          <!-- Check deposit description (shown only for check deposits) -->
+          <div class="input-group hidden" id="checkDescGroup">
+            <label for="checkDescInput">Description (optional)</label>
+            <input
+              type="text"
+              id="checkDescInput"
+              class="atm-input"
+              placeholder="e.g. Payroll check"
+              maxlength="100"
+            />
+          </div>
+
+          <div class="amount-actions">
+            <button class="btn btn-primary" id="btnConfirmAmount">Confirm</button>
+            <button class="btn btn-ghost" id="btnCancelAmount">← Back to Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================
+           VIEW: BALANCE / RESULT DISPLAY
+           ==================================================== -->
+      <section class="view" id="view-result">
+        <div class="result-content">
+          <div class="result-icon" id="resultIcon">✓</div>
+          <h1 class="result-title" id="resultTitle">Transaction Complete</h1>
+          <div class="result-body" id="resultBody"></div>
+          <button class="btn btn-primary" id="btnResultBack">Return to Menu</button>
+          <button class="btn btn-ghost" id="btnResultExit">Exit</button>
+        </div>
+      </section>
+
+      <!-- ====================================================
+           VIEW: MINI STATEMENT
+           ==================================================== -->
+      <section class="view" id="view-statement">
+        <div class="statement-content">
+          <h1 class="screen-title">Mini Statement</h1>
+          <p class="screen-subtitle">Last 10 transactions</p>
+          <div class="statement-list" id="statementList">
+            <p class="loading-text">Loading transactions...</p>
+          </div>
+          <button class="btn btn-ghost" id="btnStatementBack">← Back to Menu</button>
+        </div>
+      </section>
+
+      <!-- ====================================================
+           VIEW: CHANGE PIN
+           ==================================================== -->
+      <section class="view" id="view-changepin">
+        <div class="changepin-content">
+          <h1 class="screen-title">Change PIN</h1>
+          <p class="screen-subtitle">Your new PIN must be 4 to 6 digits.</p>
+          <div class="input-group">
+            <label for="currentPinInput">Current PIN</label>
+            <input type="password" id="currentPinInput" class="atm-input" maxlength="6" inputmode="numeric" />
+          </div>
+          <div class="input-group">
+            <label for="newPinInput">New PIN</label>
+            <input type="password" id="newPinInput" class="atm-input" maxlength="6" inputmode="numeric" />
+          </div>
+          <div class="input-group">
+            <label for="confirmPinInput">Confirm New PIN</label>
+            <input type="password" id="confirmPinInput" class="atm-input" maxlength="6" inputmode="numeric" />
+          </div>
+          <div class="amount-actions">
+            <button class="btn btn-primary" id="btnConfirmPin">Update PIN</button>
+            <button class="btn btn-ghost" id="btnCancelPin">← Back to Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================
+           VIEW: REGISTER NEW ACCOUNT
+           ==================================================== -->
+      <section class="view" id="view-register">
+        <div class="register-content">
+          <h1 class="screen-title">Open an Account</h1>
+          <p class="screen-subtitle">Fill in your details to get your card instantly.</p>
+          <div class="input-group">
+            <label for="regName">Full Name</label>
+            <input type="text" id="regName" class="atm-input" placeholder="Jane Smith" maxlength="60" />
+          </div>
+          <div class="input-group">
+            <label for="regEmail">Email Address</label>
+            <input type="email" id="regEmail" class="atm-input" placeholder="jane@email.com" />
+          </div>
+          <div class="input-group">
+            <label for="regPin">Choose PIN (4–6 digits)</label>
+            <input type="password" id="regPin" class="atm-input" maxlength="6" inputmode="numeric" />
+          </div>
+          <div class="input-group">
+            <label for="regAccountType">Account Type</label>
+            <select id="regAccountType" class="atm-input atm-select">
+              <option value="SAVINGS">Savings (2.5% p.a.)</option>
+              <option value="CHECKING">Checking (Overdraft $500)</option>
+              <option value="PREMIUM">Premium (4.5% p.a.)</option>
+            </select>
+          </div>
+          <div class="amount-actions">
+            <button class="btn btn-primary" id="btnRegisterSubmit">Create Account</button>
+            <button class="btn btn-ghost" id="btnCancelRegister">← Back</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================
+           VIEW: ADMIN PORTAL
+           ==================================================== -->
+      <section class="view" id="view-admin">
+        <div class="admin-content">
+          <h1 class="screen-title admin-title">⚙ Admin Portal</h1>
+
+          <!-- Admin Login -->
+          <div id="adminLoginPanel">
+            <div class="input-group">
+              <label for="adminUser">Username</label>
+              <input type="text" id="adminUser" class="atm-input" autocomplete="off" />
+            </div>
+            <div class="input-group">
+              <label for="adminPass">Password</label>
+              <input type="password" id="adminPass" class="atm-input" />
+            </div>
+            <button class="btn btn-primary" id="btnAdminLogin">Sign In</button>
+            <button class="btn btn-ghost" id="btnCancelAdmin">← Back</button>
+          </div>
+
+          <!-- Admin Dashboard (hidden until logged in) -->
+          <div id="adminDashboard" class="hidden">
+            <div class="admin-tabs">
+              <button class="admin-tab active" data-tab="cards">Cards</button>
+              <button class="admin-tab" data-tab="audit">Audit Logs</button>
+              <button class="admin-tab" data-tab="alerts">Alerts</button>
+              <button class="admin-tab" data-tab="health">Health</button>
+            </div>
+            <div class="admin-panel" id="adminCards">
+              <button class="btn btn-sm btn-primary" id="btnLoadCards">Load All Cards</button>
+              <div class="admin-table-wrap" id="cardsTable"></div>
+            </div>
+            <div class="admin-panel hidden" id="adminAudit">
+              <button class="btn btn-sm btn-primary" id="btnLoadAudit">Load Audit Logs</button>
+              <div class="admin-table-wrap" id="auditTable"></div>
+            </div>
+            <div class="admin-panel hidden" id="adminAlerts">
+              <button class="btn btn-sm btn-primary" id="btnLoadAlerts">Load Security Alerts</button>
+              <div class="admin-table-wrap" id="alertsTable"></div>
+            </div>
+            <div class="admin-panel hidden" id="adminHealth">
+              <button class="btn btn-sm btn-primary" id="btnLoadHealth">Refresh Health</button>
+              <div id="healthData" class="health-grid"></div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="btnAdminLogout">Sign Out</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── TOAST NOTIFICATION ─────────────────────────────── -->
+      <div class="toast hidden" id="toast">
+        <span id="toastMsg">Message</span>
+      </div>
+
+    </main>
+    <!-- END SCREEN -->
+
+    <!-- ATM lower controls (decorative) -->
+    <footer class="atm-footer">
+      <div class="atm-slot card-eject-slot"><span>CARD</span></div>
+      <div class="atm-slot cash-slot"><span>CASH</span></div>
+      <div class="atm-slot receipt-slot"><span>RECEIPT</span></div>
+    </footer>
+
+  </div><!-- END atm-shell -->
+
+  <script src="terminal.js"></script>
+</body>
+</html>

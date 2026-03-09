@@ -1,0 +1,873 @@
+/* ============================================================
+   main-style.css — SecureBank ATM Terminal UI
+   ============================================================
+   Design Philosophy:
+     - Dark terminal aesthetic with blue banking accents.
+     - High contrast for readability (accessibility-aware).
+     - Smooth CSS transitions for screen navigation.
+     - Mobile-responsive (fits on phone screens like a real ATM).
+   ============================================================ */
+
+/* ── CSS CUSTOM PROPERTIES ───────────────────────────────── */
+:root {
+  --clr-shell:       #1a1a2e;
+  --clr-screen-bg:   #0d1117;
+  --clr-screen-edge: #0a3d62;
+  --clr-primary:     #1e90ff;
+  --clr-primary-dk:  #0069cc;
+  --clr-success:     #00d26a;
+  --clr-danger:      #ff4757;
+  --clr-warning:     #ffa502;
+  --clr-text:        #e0e6ed;
+  --clr-text-dim:    #8899aa;
+  --clr-border:      #1e3a5f;
+  --clr-input-bg:    #0d1b2a;
+  --clr-card-bg:     #111827;
+  --clr-admin:       #7c3aed;
+  --clr-admin-dk:    #5b21b6;
+  --font-main:       'Segoe UI', 'Roboto', sans-serif;
+  --font-mono:       'Courier New', 'Consolas', monospace;
+  --radius:          10px;
+  --radius-sm:       6px;
+  --shadow:          0 8px 32px rgba(0, 0, 0, 0.6);
+  --transition:      0.3s ease;
+}
+
+/* ── RESET & BASE ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #060b14;
+  background-image:
+    radial-gradient(ellipse at top left, #0a1628 0%, transparent 60%),
+    radial-gradient(ellipse at bottom right, #0a0a20 0%, transparent 60%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-main);
+  color: var(--clr-text);
+  padding: 1rem;
+}
+
+/* ── ATM OUTER SHELL ──────────────────────────────────────── */
+.atm-shell {
+  width: 420px;
+  max-width: 100%;
+  background: linear-gradient(160deg, #1e2a3a 0%, var(--clr-shell) 100%);
+  border-radius: 20px;
+  box-shadow: var(--shadow), 0 0 0 2px #0e1f33, inset 0 1px 0 rgba(255,255,255,0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── ATM HEADER ───────────────────────────────────────────── */
+.atm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.2rem;
+  background: #0a1520;
+  border-bottom: 1px solid var(--clr-border);
+}
+
+.bank-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.bank-icon { font-size: 1.5rem; }
+
+.bank-name-group {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.bank-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--clr-primary);
+  letter-spacing: 0.5px;
+}
+
+.bank-tagline {
+  font-size: 0.65rem;
+  color: var(--clr-text-dim);
+  letter-spacing: 0.3px;
+}
+
+.atm-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--clr-success);
+  letter-spacing: 1px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--clr-success);
+  box-shadow: 0 0 6px var(--clr-success);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+/* ── ATM SCREEN ───────────────────────────────────────────── */
+.atm-screen {
+  position: relative;
+  background: var(--clr-screen-bg);
+  border: 2px solid var(--clr-screen-edge);
+  margin: 0.75rem;
+  border-radius: var(--radius);
+  min-height: 560px;
+  overflow: hidden;
+  box-shadow: inset 0 0 30px rgba(0,0,0,0.4);
+}
+
+/* Session timer */
+.session-timer {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--clr-warning);
+  background: rgba(255, 165, 0, 0.1);
+  border: 1px solid rgba(255, 165, 0, 0.3);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  z-index: 10;
+}
+
+/* ── VIEWS (screen switching) ─────────────────────────────── */
+.view {
+  display: none;
+  padding: 1.5rem;
+  animation: fadeIn 0.25s ease;
+  height: 100%;
+}
+
+.view.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── TYPOGRAPHY ───────────────────────────────────────────── */
+.screen-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.3rem;
+  text-align: center;
+}
+
+.screen-subtitle {
+  font-size: 0.78rem;
+  color: var(--clr-text-dim);
+  text-align: center;
+  margin-bottom: 1.2rem;
+  line-height: 1.5;
+}
+
+.menu-title {
+  font-size: 0.9rem;
+  color: var(--clr-text-dim);
+  text-align: center;
+  margin-bottom: 1rem;
+  font-weight: 400;
+}
+
+/* ── INPUT COMPONENTS ─────────────────────────────────────── */
+.input-group {
+  margin-bottom: 0.85rem;
+}
+
+.input-group label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--clr-text-dim);
+  margin-bottom: 0.3rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.atm-input {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  background: var(--clr-input-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  color: var(--clr-text);
+  font-size: 0.95rem;
+  font-family: var(--font-main);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  -webkit-appearance: none;
+}
+
+.atm-input:focus {
+  border-color: var(--clr-primary);
+  box-shadow: 0 0 0 3px rgba(30, 144, 255, 0.15);
+}
+
+.card-input {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.amount-input {
+  font-size: 1.4rem;
+  font-family: var(--font-mono);
+  text-align: center;
+  font-weight: 700;
+  color: var(--clr-success);
+}
+
+.atm-select {
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%238899aa'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 20px;
+  padding-right: 2rem;
+}
+
+.atm-select option {
+  background: var(--clr-input-bg);
+  color: var(--clr-text);
+}
+
+/* ── BUTTONS ──────────────────────────────────────────────── */
+.btn {
+  display: block;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), transform 0.1s, box-shadow var(--transition);
+  letter-spacing: 0.3px;
+  margin-top: 0.5rem;
+}
+
+.btn:active { transform: translateY(1px); }
+
+.btn-primary {
+  background: var(--clr-primary);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(30, 144, 255, 0.3);
+}
+.btn-primary:hover { background: var(--clr-primary-dk); box-shadow: 0 4px 16px rgba(30, 144, 255, 0.4); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--clr-text-dim);
+  border: 1px solid var(--clr-border);
+}
+.btn-ghost:hover { background: rgba(255,255,255,0.04); color: var(--clr-text); }
+
+.btn-danger {
+  background: var(--clr-danger);
+  color: #fff;
+}
+.btn-danger:hover { background: #e03050; }
+
+.btn-admin-link {
+  background: transparent;
+  color: var(--clr-admin);
+  font-size: 0.75rem;
+  padding: 0.4rem;
+  border: 1px solid rgba(124, 58, 237, 0.3);
+  border-radius: var(--radius-sm);
+  margin-top: 0.4rem;
+}
+.btn-admin-link:hover { background: rgba(124,58,237,0.1); }
+
+.btn-sm {
+  width: auto;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.78rem;
+  display: inline-block;
+  margin-bottom: 0.6rem;
+}
+
+.btn-back { width: auto; margin-top: 1rem; padding: 0.4rem 0.8rem; font-size: 0.78rem; display: inline-block; }
+
+.amount-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.amount-actions .btn { flex: 1; }
+
+/* ── WELCOME VIEW ─────────────────────────────────────────── */
+.welcome-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.atm-animation { margin-bottom: 1rem; }
+
+.card-slot-visual {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.card-graphic {
+  width: 180px;
+  height: 110px;
+  background: linear-gradient(135deg, #1a3a5c 0%, #0d1b2d 100%);
+  border-radius: 10px;
+  border: 1px solid var(--clr-border);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0.6rem 0.8rem;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.5);
+  animation: cardFloat 3s ease-in-out infinite;
+}
+
+@keyframes cardFloat {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-5px); }
+}
+
+.card-chip {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.8rem;
+  width: 28px;
+  height: 20px;
+  background: linear-gradient(135deg, #c8a95e, #ffd700);
+  border-radius: 3px;
+  border: 1px solid #a88040;
+}
+
+.card-number-preview {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: rgba(255,255,255,0.6);
+  letter-spacing: 2px;
+}
+
+/* ── PIN ENTRY VIEW ───────────────────────────────────────── */
+.pin-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pin-display {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1.2rem;
+}
+
+.pin-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--clr-input-bg);
+  border: 2px solid var(--clr-border);
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.pin-dot.filled {
+  background: var(--clr-primary);
+  border-color: var(--clr-primary);
+  box-shadow: 0 0 8px rgba(30, 144, 255, 0.5);
+}
+
+.pin-input-hidden {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+}
+
+/* Numeric keypad */
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  width: 200px;
+  margin-bottom: 0.5rem;
+}
+
+.key {
+  padding: 0.75rem;
+  background: var(--clr-card-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  color: var(--clr-text);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), transform 0.1s;
+  text-align: center;
+}
+
+.key:hover  { background: #1a253a; }
+.key:active { transform: scale(0.94); background: var(--clr-border); }
+
+.key-clear { background: rgba(255, 71, 87, 0.15); color: var(--clr-danger); border-color: rgba(255, 71, 87, 0.3); }
+.key-clear:hover { background: rgba(255, 71, 87, 0.25); }
+
+.key-enter { background: rgba(30, 144, 255, 0.15); color: var(--clr-primary); border-color: rgba(30, 144, 255, 0.3); }
+.key-enter:hover { background: rgba(30, 144, 255, 0.25); }
+
+/* ── ACCOUNT SUMMARY (menu view) ──────────────────────────── */
+.account-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--clr-card-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.8rem;
+  margin-bottom: 0.8rem;
+}
+
+.holder-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.account-type-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 0.2rem 0.5rem;
+  border-radius: 20px;
+  background: rgba(30, 144, 255, 0.2);
+  color: var(--clr-primary);
+  border: 1px solid rgba(30, 144, 255, 0.4);
+}
+
+.account-type-badge.PREMIUM {
+  background: rgba(124,58,237,0.2);
+  color: #a78bfa;
+  border-color: rgba(124,58,237,0.4);
+}
+
+.account-type-badge.CHECKING {
+  background: rgba(0, 210, 106, 0.15);
+  color: var(--clr-success);
+  border-color: rgba(0, 210, 106, 0.3);
+}
+
+/* ── MENU GRID ────────────────────────────────────────────── */
+.menu-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.menu-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.85rem 0.5rem;
+  background: var(--clr-card-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  color: var(--clr-text);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition), transform 0.1s;
+  text-align: center;
+}
+
+.menu-btn:hover {
+  background: #1a2535;
+  border-color: var(--clr-primary);
+  color: #fff;
+}
+
+.menu-btn:active { transform: scale(0.96); }
+
+.menu-icon { font-size: 1.5rem; }
+
+.menu-btn-exit {
+  border-color: rgba(255, 71, 87, 0.3);
+  color: var(--clr-danger);
+}
+.menu-btn-exit:hover { border-color: var(--clr-danger); background: rgba(255,71,87,0.07); }
+
+/* ── QUICK AMOUNTS ────────────────────────────────────────── */
+.quick-label {
+  font-size: 0.7rem;
+  color: var(--clr-text-dim);
+  margin-bottom: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
+}
+
+.quick-btn {
+  padding: 0.45rem;
+  background: var(--clr-card-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  color: var(--clr-text-dim);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.quick-btn:hover {
+  background: rgba(30, 144, 255, 0.1);
+  border-color: var(--clr-primary);
+  color: var(--clr-primary);
+}
+
+/* ── RESULT VIEW ──────────────────────────────────────────── */
+.result-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 1rem;
+  text-align: center;
+}
+
+.result-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  margin-bottom: 0.8rem;
+  background: rgba(0, 210, 106, 0.15);
+  border: 2px solid var(--clr-success);
+  color: var(--clr-success);
+}
+
+.result-icon.error {
+  background: rgba(255, 71, 87, 0.15);
+  border-color: var(--clr-danger);
+  color: var(--clr-danger);
+}
+
+.result-title {
+  margin-bottom: 0.75rem;
+}
+
+.result-body {
+  background: var(--clr-card-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  padding: 0.8rem 1rem;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--clr-text);
+  white-space: pre-wrap;
+  line-height: 1.7;
+  margin-bottom: 0.8rem;
+  word-break: break-all;
+}
+
+/* ── MINI STATEMENT ───────────────────────────────────────── */
+.statement-content { height: 100%; }
+
+.statement-list {
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
+}
+
+.statement-list::-webkit-scrollbar { width: 4px; }
+.statement-list::-webkit-scrollbar-track { background: transparent; }
+.statement-list::-webkit-scrollbar-thumb { background: var(--clr-border); border-radius: 2px; }
+
+.txn-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0.7rem;
+  background: var(--clr-card-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.76rem;
+}
+
+.txn-row:hover { border-color: var(--clr-primary); }
+
+.txn-type {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.txn-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.badge-WITHDRAWAL, .badge-TRANSFER {
+  background: rgba(255, 71, 87, 0.2);
+  color: var(--clr-danger);
+}
+.badge-DEPOSIT, .badge-CHECK_DEPOSIT {
+  background: rgba(0, 210, 106, 0.15);
+  color: var(--clr-success);
+}
+.badge-PENDING {
+  background: rgba(255, 165, 0, 0.2);
+  color: var(--clr-warning);
+}
+
+.txn-amt {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.txn-amt.debit   { color: var(--clr-danger); }
+.txn-amt.credit  { color: var(--clr-success); }
+.txn-amt.pending { color: var(--clr-warning); }
+
+.txn-date {
+  color: var(--clr-text-dim);
+  font-size: 0.68rem;
+}
+
+.loading-text {
+  text-align: center;
+  color: var(--clr-text-dim);
+  font-size: 0.8rem;
+  padding: 2rem 0;
+}
+
+/* ── ADMIN PORTAL ─────────────────────────────────────────── */
+.admin-title { color: var(--clr-admin) !important; }
+
+.admin-tabs {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.admin-tab {
+  padding: 0.35rem 0.7rem;
+  background: var(--clr-card-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  color: var(--clr-text-dim);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.admin-tab.active,
+.admin-tab:hover {
+  background: rgba(124,58,237,0.15);
+  border-color: var(--clr-admin);
+  color: #a78bfa;
+}
+
+.admin-panel { display: block; }
+.admin-panel.hidden { display: none; }
+
+.admin-table-wrap {
+  max-height: 320px;
+  overflow-y: auto;
+  font-size: 0.72rem;
+  color: var(--clr-text-dim);
+}
+
+.admin-table-wrap::-webkit-scrollbar { width: 4px; }
+.admin-table-wrap::-webkit-scrollbar-thumb { background: var(--clr-border); border-radius: 2px; }
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--clr-border);
+  text-align: left;
+}
+
+.admin-table th {
+  color: var(--clr-text-dim);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #0a1520;
+  position: sticky;
+  top: 0;
+}
+
+.admin-table tr:hover td { background: rgba(30,144,255,0.04); }
+
+.lock-btn {
+  padding: 0.15rem 0.4rem;
+  border: 1px solid;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  cursor: pointer;
+  background: transparent;
+  transition: background var(--transition);
+}
+
+.lock-btn.lock {
+  border-color: var(--clr-danger);
+  color: var(--clr-danger);
+}
+.lock-btn.lock:hover { background: rgba(255,71,87,0.15); }
+
+.lock-btn.unlock {
+  border-color: var(--clr-success);
+  color: var(--clr-success);
+}
+.lock-btn.unlock:hover { background: rgba(0,210,106,0.1); }
+
+/* Health grid */
+.health-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.health-card {
+  background: var(--clr-card-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.7rem;
+}
+
+.health-label {
+  font-size: 0.6rem;
+  color: var(--clr-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.2rem;
+}
+
+.health-value {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--clr-success);
+  font-weight: 700;
+}
+
+/* ── TOAST NOTIFICATION ───────────────────────────────────── */
+.toast {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e2a3a;
+  border: 1px solid var(--clr-border);
+  border-radius: 20px;
+  padding: 0.5rem 1.2rem;
+  font-size: 0.78rem;
+  color: var(--clr-text);
+  white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  z-index: 100;
+  animation: toastIn 0.3s ease;
+}
+
+.toast.toast-success { border-color: var(--clr-success); color: var(--clr-success); }
+.toast.toast-error   { border-color: var(--clr-danger);  color: var(--clr-danger);  }
+.toast.toast-warn    { border-color: var(--clr-warning); color: var(--clr-warning); }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── ATM FOOTER / SLOTS ───────────────────────────────────── */
+.atm-footer {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: #0a1520;
+  border-top: 1px solid var(--clr-border);
+}
+
+.atm-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.atm-slot span {
+  font-size: 0.55rem;
+  color: var(--clr-text-dim);
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+.atm-slot::before {
+  content: '';
+  display: block;
+  width: 50px;
+  height: 6px;
+  background: #0d1b2a;
+  border-radius: 3px;
+  border: 1px solid var(--clr-border);
+}
+
+/* ── UTILITY ──────────────────────────────────────────────── */
+.hidden { display: none !important; }
+
+/* Responsive tweaks for small screens */
+@media (max-width: 440px) {
+  .atm-shell { width: 100%; border-radius: 12px; margin: 0; }
+  body { padding: 0; align-items: flex-start; }
+}

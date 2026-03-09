@@ -1,0 +1,112 @@
+/**
+ * database.js
+ * ============================================================
+ * OOSE PATTERN: SINGLETON
+ * ============================================================
+ * Ensures only ONE instance of the MongoDB connection is ever
+ * created across the entire application lifecycle. Subsequent
+ * calls to `Database.getInstance()` return the same cached
+ * connection, preventing resource exhaustion.
+ *
+ * Why Singleton here?
+ *  - A database connection pool is expensive to create.
+ *  - Multiple connection instances can cause concurrency bugs.
+ *  - A single shared instance enforces a controlled access point.
+ */
+
+'use strict';
+
+const mongoose = require('mongoose');
+
+class Database {
+  constructor() {
+    // Guard clause: if an instance already exists, return it.
+    // This is the core of the Singleton pattern in JavaScript.
+    if (Database._instance) {
+      return Database._instance;
+    }
+
+    /** @type {mongoose.Connection | null} */
+    this._connection = null;
+    this._isConnected = false;
+
+    // Cache the single instance on the class itself.
+    Database._instance = this;
+  }
+
+  /**
+   * Static factory accessor — the canonical way to obtain the
+   * Singleton instance.
+   * @returns {Database}
+   */
+  static getInstance() {
+    if (!Database._instance) {
+      new Database();
+    }
+    return Database._instance;
+  }
+
+  /**
+   * Opens the MongoDB connection if not already open.
+   * Idempotent — safe to call multiple times.
+   * @returns {Promise<mongoose.Connection>}
+   */
+  async connect() {
+    if (this._isConnected) {
+      console.log('[Database Singleton] Reusing existing connection.');
+      return this._connection;
+    }
+
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+      throw new Error('[Database Singleton] MONGODB_URI is not defined in .env');
+    }
+
+    try {
+      this._connection = await mongoose.connect(uri);
+      this._isConnected = true;
+
+      // Attach lifecycle event listeners for observability.
+      mongoose.connection.on('error', (err) => {
+        console.error('[Database Singleton] Runtime error:', err.message);
+        this._isConnected = false;
+      });
+
+      mongoose.connection.on('disconnected', () => {
+        console.warn('[Database Singleton] MongoDB disconnected. Retrying...');
+        this._isConnected = false;
+      });
+
+      console.log('[Database Singleton] MongoDB connected successfully.');
+      return this._connection;
+    } catch (error) {
+      console.error('[Database Singleton] Initial connection failed:', error.message);
+      process.exit(1); // Fail fast — the app cannot run without a database.
+    }
+  }
+
+  /**
+   * Returns the current Mongoose connection object.
+   * Useful for health-check endpoints.
+   * @returns {mongoose.Connection}
+   */
+  getConnection() {
+    return mongoose.connection;
+  }
+
+  /**
+   * Exposes the readyState of the MongoDB connection.
+   * 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
+   * @returns {number}
+   */
+  getReadyState() {
+    return mongoose.connection.readyState;
+  }
+}
+
+// Note: Object.freeze() is intentionally NOT used here because the instance
+// must update mutable state (_connection, _isConnected) on connect().
+// The Singleton guarantee is enforced by the static _instance guard instead.
+const instance = Database.getInstance();
+
+module.exports = instance;
