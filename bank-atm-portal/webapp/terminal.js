@@ -178,6 +178,7 @@ const ATMTerminal = {
     this._bindRegisterView();
     this._bindAdminView();
     this._bindStatementView();
+    this._bindResultButtons();
     ViewManager.show('welcome');
   },
 
@@ -797,8 +798,4 @@ const ATMTerminal = {
 
 document.addEventListener('DOMContentLoaded', () => {
   ATMTerminal.init();
-
-  // Result view back buttons (need to be after init)
-  document.getElementById('btnResultBack').addEventListener('click', () => ViewManager.show('menu'));
-  document.getElementById('btnResultExit').addEventListener('click', () => ATMTerminal.logout());
 });
