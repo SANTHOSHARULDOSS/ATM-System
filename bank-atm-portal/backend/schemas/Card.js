@@ -92,6 +92,46 @@ const CardSchema = new mongoose.Schema(
       trim: true,
       default: 'Account Holder',
     },
+
+    /** Mobile phone number for card recovery and PIN reset. */
+    phoneNumber: {
+      type: String,
+      required: [true, 'Phone number is required.'],
+      index: true,
+      match: [/^\d{10,15}$/, 'Please provide a valid phone number (10-15 digits).'],
+    },
+
+    /** ATM machine that issued this card/account in this simulation. */
+    atmMachineNumber: {
+      type: String,
+      default: 'ATM-001',
+      index: true,
+    },
+
+    /** Biometric authentication enabled (fingerprint or face). */
+    biometricEnabled: {
+      type: Boolean,
+      default: false,
+    },
+
+    /** Type of biometric: 'FINGERPRINT', 'FACE', or 'NONE'. */
+    biometricType: {
+      type: String,
+      enum: ['FINGERPRINT', 'FACE', 'NONE'],
+      default: 'NONE',
+    },
+
+    /** Simulated biometric data (hash or token for verification). */
+    biometricData: {
+      type: String,
+      default: null,
+    },
+
+    /** Require biometric for high-value transactions (>$1000). */
+    requireBiometricForTransactions: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true, // Adds createdAt and updatedAt automatically.
@@ -142,6 +182,15 @@ class CardDAO {
   }
 
   /**
+   * Finds a card by phone number. Used for card recovery and PIN reset.
+   * @param {string} phoneNumber
+   * @returns {Promise<Object|null>}
+   */
+  static async findByPhoneNumber(phoneNumber) {
+    return CardModel.findOne({ phoneNumber });
+  }
+
+  /**
    * Applies a partial update to a card document atomically.
    * Returns the updated document.
    * @param {string} cardNumber
@@ -170,6 +219,16 @@ class CardDAO {
   static async exists(cardNumber) {
     const count = await CardModel.countDocuments({ cardNumber });
     return count > 0;
+  }
+
+  /**
+   * Deletes a card record by card number.
+   * Used by admin when customer requests account closure.
+   * @param {string} cardNumber
+   * @returns {Promise<Object|null>}
+   */
+  static async deleteByCardNumber(cardNumber) {
+    return CardModel.findOneAndDelete({ cardNumber });
   }
 }
 

@@ -28,6 +28,63 @@
 
 const API_BASE = '/api';
 
+const I18N = {
+  EN: {
+    welcomeTitle: 'Welcome',
+    welcomeSubtitle: 'Please enter your 16-digit card number to begin.',
+    insertCard: 'Insert Card',
+    register: 'New Customer? Register Here',
+    admin: 'Admin Portal',
+    maintenance: 'Maintenance',
+    menuTitle: 'How can we help you today?',
+    balance: 'Check Balance',
+    withdraw: 'Withdraw',
+    deposit: 'Deposit Cash',
+    transfer: 'Transfer',
+    statement: 'Mini Statement',
+    checkDeposit: 'Check Deposit',
+    changePin: 'Change PIN',
+    biometric: 'Biometric Security',
+    exit: 'Exit / Eject Card',
+  },
+  TA: {
+    welcomeTitle: 'வரவேற்கிறோம்',
+    welcomeSubtitle: 'தொடர 16 இலக்க அட்டை எண்ணை உள்ளிடவும்.',
+    insertCard: 'அட்டையை செலுத்தவும்',
+    register: 'புதிய வாடிக்கையாளர்? பதிவு செய்யவும்',
+    admin: 'நிர்வாகப் பகுதி',
+    maintenance: 'பராமரிப்பு',
+    menuTitle: 'இன்று எப்படி உதவலாம்?',
+    balance: 'இருப்பை பார்க்க',
+    withdraw: 'பணம் எடுக்க',
+    deposit: 'பணம் வைப்பு',
+    transfer: 'பரிமாற்றம்',
+    statement: 'மினி ஸ்டேட்மெண்ட்',
+    checkDeposit: 'காசோலை வைப்பு',
+    changePin: 'PIN மாற்றம்',
+    biometric: 'பயோமெட்ரிக் பாதுகாப்பு',
+    exit: 'வெளியேறு / அட்டை எடு',
+  },
+  HI: {
+    welcomeTitle: 'स्वागत है',
+    welcomeSubtitle: 'शुरू करने के लिए 16 अंकों का कार्ड नंबर दर्ज करें।',
+    insertCard: 'कार्ड डालें',
+    register: 'नया ग्राहक? यहाँ पंजीकरण करें',
+    admin: 'एडमिन पोर्टल',
+    maintenance: 'मेंटेनेंस',
+    menuTitle: 'आज आपकी कैसे सहायता करें?',
+    balance: 'बैलेंस देखें',
+    withdraw: 'निकासी',
+    deposit: 'जमा करें',
+    transfer: 'ट्रांसफर',
+    statement: 'मिनी स्टेटमेंट',
+    checkDeposit: 'चेक जमा',
+    changePin: 'PIN बदलें',
+    biometric: 'बायोमेट्रिक सुरक्षा',
+    exit: 'बाहर निकलें / कार्ड निकालें',
+  },
+};
+
 const APIClient = {
   /**
    * Makes an authenticated or unauthenticated HTTP request.
@@ -160,26 +217,175 @@ const ATMTerminal = {
   // Session state
   token:       null,
   adminToken:  null,
+  maintenanceToken: null,
   cardNumber:  null,
   holderName:  null,
   accountType: null,
   balance:     null,
+  language: null,
+  theme: localStorage.getItem('atmTheme') || 'dark',
+  _indiaClockInterval: null,
+  _adsInterval: null,
+  _adsIndex: 0,
+  _ads: [
+    'SANTHOSH BANK ATM - Safe Banking, Smart Future.',
+    'Open a Savings Account Today with SANTHOSH BANK ATM.',
+    'Use Biometric Security for Safer ATM Transactions.',
+    'SANTHOSH BANK ATM - Trusted Local Banking Since 2026.',
+  ],
 
   // Tracks which transaction type the amount view is handling.
   _currentAction: null,
 
   /* ── Initialisation ───────────────────────────────────── */
   init() {
+    this._bindThemeSwitcher();
+    this._applyTheme(this.theme);
+    this._bindLanguagePicker();
+    this._applyLayoutMode();
+    this._startIndiaClock();
+    this._startAdRotation();
+    window.addEventListener('resize', () => this._applyLayoutMode());
+
     this._bindCardInput();
     this._bindPinKeypad();
     this._bindMenuButtons();
     this._bindAmountView();
     this._bindChangePinView();
+    this._bindBiometricSetup();
+    this._bindBiometricVerify();
     this._bindRegisterView();
     this._bindAdminView();
+    this._bindMaintenanceView();
     this._bindStatementView();
     this._bindResultButtons();
-    ViewManager.show('welcome');
+
+    ViewManager.show('language');
+  },
+
+  _bindThemeSwitcher() {
+    const btn = document.getElementById('btnThemeToggle');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const next = this.theme === 'dark' ? 'light' : 'dark';
+      this._applyTheme(next);
+    });
+  },
+
+  _applyTheme(theme) {
+    this.theme = theme;
+    localStorage.setItem('atmTheme', theme);
+    document.body.classList.toggle('theme-light', theme === 'light');
+    const btn = document.getElementById('btnThemeToggle');
+    if (btn) btn.textContent = theme === 'light' ? '☀️' : '🌙';
+  },
+
+  _applyLayoutMode() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const ratio = w / h;
+    document.body.classList.remove('layout-square', 'layout-portrait', 'layout-landscape');
+
+    if (ratio > 0.9 && ratio < 1.1) {
+      document.body.classList.add('layout-square');
+    } else if (ratio <= 0.9) {
+      document.body.classList.add('layout-portrait');
+    } else {
+      document.body.classList.add('layout-landscape');
+    }
+  },
+
+  _bindLanguagePicker() {
+    const bind = (id, lang) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('click', () => {
+        this._setLanguage(lang);
+        ViewManager.show('welcome');
+      });
+    };
+    bind('btnLangEnglish', 'EN');
+    bind('btnLangTamil', 'TA');
+    bind('btnLangHindi', 'HI');
+  },
+
+  _setLanguage(lang) {
+    this.language = lang;
+    const t = I18N[lang] || I18N.EN;
+
+    const setText = (selector, value) => {
+      const el = document.querySelector(selector);
+      if (el) el.textContent = value;
+    };
+
+    setText('#view-welcome .screen-title', t.welcomeTitle);
+    setText('#view-welcome .screen-subtitle', t.welcomeSubtitle);
+    setText('#btnInsertCard', t.insertCard);
+    setText('#btnGoRegister', t.register);
+    setText('#btnGoAdmin', t.admin);
+    setText('#btnGoMaintenance', t.maintenance);
+    setText('#view-menu .menu-title', t.menuTitle);
+    setText('#btnBalance span:last-child', t.balance);
+    setText('#btnWithdraw span:last-child', t.withdraw);
+    setText('#btnDeposit span:last-child', t.deposit);
+    setText('#btnTransfer span:last-child', t.transfer);
+    setText('#btnStatement span:last-child', t.statement);
+    setText('#btnCheckDeposit span:last-child', t.checkDeposit);
+    setText('#btnChangePin span:last-child', t.changePin);
+    setText('#btnBiometric span:last-child', t.biometric);
+    setText('#btnMenuLanguage span:last-child', 'Change Language');
+    setText('#btnExit span:last-child', t.exit);
+  },
+
+  _goToLanguageSelection() {
+    this.token = null;
+    this.cardNumber = null;
+    this._pinValue = '';
+    this._updatePinDots(0);
+    ViewManager.show('language');
+  },
+
+  _startIndiaClock() {
+    const clockEl = document.getElementById('indiaDateTime');
+    if (!clockEl) return;
+
+    const updateClock = () => {
+      const now = new Date();
+      const dateText = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(now);
+
+      const timeText = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).format(now);
+
+      clockEl.textContent = `India Time (IST): ${dateText} ${timeText}`;
+    };
+
+    updateClock();
+    if (this._indiaClockInterval) clearInterval(this._indiaClockInterval);
+    this._indiaClockInterval = setInterval(updateClock, 1000);
+  },
+
+  _startAdRotation() {
+    const adEl = document.getElementById('bankAd');
+    if (!adEl) return;
+
+    const rotate = () => {
+      adEl.textContent = this._ads[this._adsIndex % this._ads.length];
+      this._adsIndex += 1;
+    };
+
+    rotate();
+    if (this._adsInterval) clearInterval(this._adsInterval);
+    this._adsInterval = setInterval(rotate, 5000);
   },
 
   /* ── Session Management ───────────────────────────────── */
@@ -209,7 +415,7 @@ const ATMTerminal = {
 
     SessionTimer.clear();
     document.getElementById('cardInput').value = '';
-    ViewManager.show('welcome');
+    this._goToLanguageSelection();
   },
 
   /* ── Card Input / Insert Card ─────────────────────────── */
@@ -240,9 +446,21 @@ const ATMTerminal = {
       ViewManager.show('register');
     });
 
+    const changeLangBtn = document.getElementById('btnChangeLanguage');
+    if (changeLangBtn) {
+      changeLangBtn.addEventListener('click', () => this._goToLanguageSelection());
+    }
+
     document.getElementById('btnGoAdmin').addEventListener('click', () => {
       ViewManager.show('admin');
     });
+
+    const maintenanceBtn = document.getElementById('btnGoMaintenance');
+    if (maintenanceBtn) {
+      maintenanceBtn.addEventListener('click', () => {
+        ViewManager.show('maintenance');
+      });
+    }
   },
 
   /* ── PIN Keypad ───────────────────────────────────────── */
@@ -288,7 +506,7 @@ const ATMTerminal = {
       this._pinValue = '';
       this._updatePinDots(0);
       this.cardNumber = null;
-      ViewManager.show('welcome');
+      this._goToLanguageSelection();
     });
   },
 
@@ -337,12 +555,14 @@ const ATMTerminal = {
       btnStatement:    () => this._doStatement(),
       btnCheckDeposit: () => this._openAmountView('CHECK_DEPOSIT', 'Check Deposit', 'Enter the check amount.', false),
       btnChangePin:    () => ViewManager.show('changepin'),
+      btnBiometric:    () => ViewManager.show('biometric-setup'),
+      btnMenuLanguage: () => this._goToLanguageSelection(),
       btnExit:         () => { this.logout(); ToastManager.show('Card ejected. Thank you for banking with us.', 'success'); },
     };
 
     for (const [id, fn] of Object.entries(actions)) {
       const el = document.getElementById(id);
-      if (el) el.addEventListener('click', () => { SessionTimer.reset(); fn(); });
+      if (el) el.addEventListener('click', () => { fn(); });
     }
   },
 
@@ -399,7 +619,6 @@ const ATMTerminal = {
     });
 
     document.getElementById('btnConfirmAmount').addEventListener('click', () => {
-      SessionTimer.reset();
       this._processTransaction();
     });
 
@@ -512,7 +731,6 @@ const ATMTerminal = {
   /* ── Change PIN View ──────────────────────────────────── */
   _bindChangePinView() {
     document.getElementById('btnConfirmPin').addEventListener('click', async () => {
-      SessionTimer.reset();
       const currentPin = document.getElementById('currentPinInput').value;
       const newPin     = document.getElementById('newPinInput').value;
       const confirmPin = document.getElementById('confirmPinInput').value;
@@ -564,26 +782,32 @@ const ATMTerminal = {
     document.getElementById('btnRegisterSubmit').addEventListener('click', async () => {
       const holderName  = document.getElementById('regName').value.trim();
       const email       = document.getElementById('regEmail').value.trim();
+      const phoneNumber = document.getElementById('regPhone').value.trim();
       const pin         = document.getElementById('regPin').value;
       const accountType = document.getElementById('regAccountType').value;
 
-      if (!holderName || !email || !pin) {
+      if (!holderName || !email || !phoneNumber || !pin) {
         ToastManager.show('All fields are required.', 'error');
         return;
       }
 
+      if (!/^\d{10,15}$/.test(phoneNumber.replace(/\D/g, ''))) {
+        ToastManager.show('Please enter a valid phone number (10-15 digits).', 'error');
+        return;
+      }
+
       try {
-        const res = await APIClient.post('/auth/register', { email, pin, holderName, accountType });
+        const res = await APIClient.post('/auth/register', { email, pin, holderName, accountType, phoneNumber });
 
         // Clear fields
-        ['regName', 'regEmail', 'regPin'].forEach((id) => {
+        ['regName', 'regEmail', 'regPhone', 'regPin'].forEach((id) => {
           document.getElementById(id).value = '';
         });
 
         this._showResult(
           '✓',
           'Account Created!',
-          `Card Number  : ${res.data.cardNumber}\nEmail        : ${res.data.email}\nAccount Type : ${res.data.accountType}\nWelcome Credit: $${res.data.balance.toFixed(2)}\n\n⚠ Save your card number carefully.\nYou will need it to access this ATM.`
+          `Card Number  : ${res.data.cardNumber}\nEmail        : ${res.data.email}\nPhone        : ${res.data.phoneNumber}\nAccount Type : ${res.data.accountType}\nWelcome Credit: $${res.data.balance.toFixed(2)}\n\n⚠ Save your card number carefully.\nYou will need it to access this ATM.`
         );
       } catch (err) {
         ToastManager.show(err.message, 'error');
@@ -592,6 +816,98 @@ const ATMTerminal = {
 
     document.getElementById('btnCancelRegister').addEventListener('click', () => {
       ViewManager.show('welcome');
+    });
+  },
+
+  /* ── Biometric Setup ──────────────────────────────────── */
+  _bindBiometricSetup() {
+    const fingerprintBtn = document.getElementById('btnFingerprint');
+    const faceBtn = document.getElementById('btnFaceRecognition');
+    const skipBtn = document.getElementById('btnSkipBiometric');
+
+    if (fingerprintBtn) {
+      fingerprintBtn.addEventListener('click', async () => {
+        await this._setupBiometric('FINGERPRINT');
+      });
+    }
+
+    if (faceBtn) {
+      faceBtn.addEventListener('click', async () => {
+        await this._setupBiometric('FACE');
+      });
+    }
+
+    if (skipBtn) {
+      skipBtn.addEventListener('click', () => {
+        ViewManager.show('menu');
+        ToastManager.show('You can enable biometric security later from the menu.', 'info');
+      });
+    }
+  },
+
+  async _setupBiometric(type) {
+    if (!this.token) {
+      ToastManager.show('You must be logged in to setup biometric.', 'error');
+      return;
+    }
+
+    try {
+      // Show biometric verification screen with scanner animation
+      ViewManager.show('biometric-verify');
+      document.getElementById('bioVerifyTitle').textContent = `Enroll Your ${type}`;
+      
+      // Simulate biometric enrollment process (2.5 seconds)
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+
+      // Call backend API to save biometric
+      const res = await APIClient.post(
+        '/account/biometric/setup',
+        { biometricType: type },
+        this.token
+      );
+
+      if (res.success) {
+        ToastManager.show(`✓ ${type} enrollment successful!`, 'success');
+        ViewManager.show('menu');
+      } else {
+        ToastManager.show(res.message || 'Biometric setup failed.', 'error');
+        ViewManager.show('menu');
+      }
+    } catch (err) {
+      ToastManager.show(`Biometric setup failed: ${err.message}`, 'error');
+      ViewManager.show('menu');
+    }
+  },
+
+  /* ── Biometric Verification ───────────────────────────── */
+  _bindBiometricVerify() {
+    const btnContinue = document.getElementById('btnBioContinue');
+    const btnCancel = document.getElementById('btnBioCancel');
+
+    if (btnContinue) {
+      btnContinue.addEventListener('click', () => {
+        ViewManager.show('menu');
+        ToastManager.show('✓ Biometric verified successfully!', 'success');
+      });
+    }
+
+    if (btnCancel) {
+      btnCancel.addEventListener('click', () => {
+        ViewManager.show('menu');
+        ToastManager.show('Biometric verification cancelled.', 'warning');
+      });
+    }
+  },
+
+  async _showBiometricVerification(biometricType) {
+    ViewManager.show('biometric-verify');
+    document.getElementById('bioVerifyTitle').textContent = `Verify Your ${biometricType}`;
+    
+    // Simulate biometric verification with progress
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(true);
+      }, 2000);
     });
   },
 
@@ -622,7 +938,7 @@ const ATMTerminal = {
     });
 
     document.getElementById('btnCancelAdmin').addEventListener('click', () => {
-      ViewManager.show('welcome');
+      this._goToLanguageSelection();
     });
 
     document.getElementById('btnAdminLogout').addEventListener('click', () => {
@@ -631,7 +947,7 @@ const ATMTerminal = {
       document.getElementById('adminDashboard').classList.add('hidden');
       document.getElementById('adminUser').value = '';
       document.getElementById('adminPass').value = '';
-      ViewManager.show('welcome');
+      this._goToLanguageSelection();
     });
 
     // Tab switching
@@ -659,13 +975,14 @@ const ATMTerminal = {
         wrap.innerHTML = `
           <table class="admin-table">
             <thead><tr>
-              <th>Card (last 4)</th><th>Name</th><th>Type</th><th>Balance</th><th>Status</th><th>Action</th>
+              <th>Card (last 4)</th><th>Name</th><th>ATM</th><th>Type</th><th>Balance</th><th>Status</th><th>Action</th>
             </tr></thead>
             <tbody>
               ${res.data.cards.map((c) => `
                 <tr>
                   <td style="font-family:monospace">•••• ${c.cardNumber.slice(-4)}</td>
                   <td>${c.holderName}</td>
+                  <td>${c.atmMachineNumber || 'ATM-001'}</td>
                   <td>${c.accountType}</td>
                   <td>$${parseFloat(c.balance).toFixed(2)}</td>
                   <td style="color:${c.isLocked ? 'var(--clr-danger)' : 'var(--clr-success)'}">
@@ -676,6 +993,7 @@ const ATMTerminal = {
                       data-card="${c.cardNumber}" data-action="${c.isLocked ? 'unlock' : 'lock'}">
                       ${c.isLocked ? 'Unlock' : 'Lock'}
                     </button>
+                    <button class="lock-btn delete" data-card="${c.cardNumber}" data-action="delete">Delete</button>
                   </td>
                 </tr>`).join('')}
             </tbody>
@@ -687,8 +1005,14 @@ const ATMTerminal = {
             const card   = btn.dataset.card;
             const action = btn.dataset.action;
             try {
-              await APIClient.put(`/admin/cards/${card}/${action}`, {}, this.adminToken);
-              ToastManager.show(`Card ...${card.slice(-4)} ${action}ed.`, 'success');
+              if (action === 'delete') {
+                if (!confirm(`Delete account ending in ${card.slice(-4)}? This cannot be undone.`)) return;
+                await APIClient.request(`/admin/cards/${card}`, 'DELETE', null, this.adminToken);
+                ToastManager.show(`Card ...${card.slice(-4)} deleted.`, 'success');
+              } else {
+                await APIClient.put(`/admin/cards/${card}/${action}`, {}, this.adminToken);
+                ToastManager.show(`Card ...${card.slice(-4)} ${action}ed.`, 'success');
+              }
               document.getElementById('btnLoadCards').click(); // Refresh table
             } catch (err) {
               ToastManager.show(err.message, 'error');
@@ -789,6 +1113,142 @@ const ATMTerminal = {
         wrap.innerHTML = `<p class="loading-text" style="color:var(--clr-danger)">${err.message}</p>`;
       }
     });
+
+    document.getElementById('btnAdminSetOutOfOrder').addEventListener('click', async () => {
+      try {
+        await APIClient.post('/admin/atm/out-of-order', { reason: 'Marked by admin panel.' }, this.adminToken);
+        ToastManager.show('ATM set to OUT OF ORDER.', 'warn');
+        document.getElementById('btnLoadHealth').click();
+      } catch (err) {
+        ToastManager.show(err.message, 'error');
+      }
+    });
+
+    document.getElementById('btnAdminSetOnline').addEventListener('click', async () => {
+      try {
+        await APIClient.post('/admin/atm/online', {}, this.adminToken);
+        ToastManager.show('ATM set to ONLINE.', 'success');
+        document.getElementById('btnLoadHealth').click();
+      } catch (err) {
+        ToastManager.show(err.message, 'error');
+      }
+    });
+
+    document.getElementById('btnAdminRefill').addEventListener('click', async () => {
+      try {
+        const amount = parseFloat(document.getElementById('adminRefillAmount').value);
+        if (isNaN(amount) || amount <= 0) {
+          ToastManager.show('Enter a valid refill amount.', 'error');
+          return;
+        }
+        await APIClient.post('/admin/atm/refill', { amount }, this.adminToken);
+        ToastManager.show(`Cash refilled by $${amount.toFixed(2)}.`, 'success');
+        document.getElementById('btnLoadHealth').click();
+      } catch (err) {
+        ToastManager.show(err.message, 'error');
+      }
+    });
+
+    document.getElementById('btnLoadAdminTxns').addEventListener('click', async () => {
+      const wrap = document.getElementById('healthData');
+      wrap.innerHTML = '<p class="loading-text">Loading transactions...</p>';
+      try {
+        const res = await APIClient.get('/admin/transactions?limit=30', this.adminToken);
+        const rows = res.data.transactions || [];
+        if (!rows.length) {
+          wrap.innerHTML = '<p class="loading-text">No transactions found.</p>';
+          return;
+        }
+        wrap.innerHTML = rows.map((t) => `
+          <div class="health-card">
+            <div class="health-label">${t.type} · ${new Date(t.createdAt).toLocaleString()}</div>
+            <div class="health-value">$${parseFloat(t.amount).toFixed(2)} · ....${t.cardNumber.slice(-4)} · ${t.status}</div>
+          </div>`).join('');
+      } catch (err) {
+        wrap.innerHTML = `<p class="loading-text" style="color:var(--clr-danger)">${err.message}</p>`;
+      }
+    });
+  },
+
+  _bindMaintenanceView() {
+    const loginBtn = document.getElementById('btnTechLogin');
+    const cancelBtn = document.getElementById('btnCancelMaintenance');
+    const logoutBtn = document.getElementById('btnMaintenanceLogout');
+
+    if (loginBtn) {
+      loginBtn.addEventListener('click', async () => {
+        const username = document.getElementById('techUser').value;
+        const password = document.getElementById('techPass').value;
+        try {
+          const res = await APIClient.post('/maintenance/login', { username, password });
+          this.maintenanceToken = res.token;
+          document.getElementById('maintenanceLoginPanel').classList.add('hidden');
+          document.getElementById('maintenanceDashboard').classList.remove('hidden');
+          ToastManager.show('Maintenance session started.', 'success');
+        } catch (err) {
+          ToastManager.show(err.message, 'error');
+        }
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => this._goToLanguageSelection());
+    }
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', () => {
+        this.maintenanceToken = null;
+        document.getElementById('maintenanceLoginPanel').classList.remove('hidden');
+        document.getElementById('maintenanceDashboard').classList.add('hidden');
+        this._goToLanguageSelection();
+      });
+    }
+
+    const withTechToken = async (fn) => {
+      if (!this.maintenanceToken) {
+        ToastManager.show('Maintenance login required.', 'error');
+        return;
+      }
+      try {
+        await fn();
+      } catch (err) {
+        ToastManager.show(err.message, 'error');
+      }
+    };
+
+    const output = document.getElementById('maintenanceData');
+
+    document.getElementById('btnRunDiagnostics')?.addEventListener('click', () => withTechToken(async () => {
+      const res = await APIClient.get('/maintenance/diagnostics', this.maintenanceToken);
+      output.innerHTML = `<pre class="result-body">${JSON.stringify(res.data, null, 2)}</pre>`;
+    }));
+
+    document.getElementById('btnSetOutOfOrder')?.addEventListener('click', () => withTechToken(async () => {
+      await APIClient.post('/maintenance/status', { online: false, reason: 'Technician maintenance mode.' }, this.maintenanceToken);
+      ToastManager.show('ATM status updated to OUT OF ORDER.', 'warn');
+    }));
+
+    document.getElementById('btnSetOnline')?.addEventListener('click', () => withTechToken(async () => {
+      await APIClient.post('/maintenance/status', { online: true }, this.maintenanceToken);
+      ToastManager.show('ATM status updated to ONLINE.', 'success');
+    }));
+
+    document.getElementById('btnLoadErrorLogs')?.addEventListener('click', () => withTechToken(async () => {
+      const res = await APIClient.get('/maintenance/error-logs', this.maintenanceToken);
+      output.innerHTML = `<pre class="result-body">${JSON.stringify(res.data.logs || [], null, 2)}</pre>`;
+    }));
+
+    document.getElementById('btnEnableService')?.addEventListener('click', () => withTechToken(async () => {
+      const service = document.getElementById('serviceSelect').value;
+      await APIClient.post('/maintenance/service-toggle', { service, enabled: true }, this.maintenanceToken);
+      ToastManager.show(`${service} enabled.`, 'success');
+    }));
+
+    document.getElementById('btnDisableService')?.addEventListener('click', () => withTechToken(async () => {
+      const service = document.getElementById('serviceSelect').value;
+      await APIClient.post('/maintenance/service-toggle', { service, enabled: false }, this.maintenanceToken);
+      ToastManager.show(`${service} disabled.`, 'warn');
+    }));
   },
 };
 
@@ -798,4 +1258,10 @@ const ATMTerminal = {
 
 document.addEventListener('DOMContentLoaded', () => {
   ATMTerminal.init();
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('Service worker registration failed:', err.message);
+    });
+  }
 });

@@ -27,15 +27,19 @@ const rateLimit  = require('express-rate-limit');
 
 // Internal modules
 const db         = require('./database');                 // Singleton DB
-const { errorHandler, verifyToken, verifyAdmin, validateInput } = require('./authentication');
+const { errorHandler, verifyToken, verifyAdmin, verifyMaintenance, validateInput } = require('./authentication');
 
 // MVC Controllers
 const {
   registerCard, loginWithPin, adminLogin,
+  recoverCardNumber, resetPinWithPhone,
+  setupBiometric, verifyBiometric, disableBiometric,
+  maintenanceLogin, maintenanceDiagnostics, maintenanceUpdateStatus, maintenanceToggleService, maintenanceErrorLogs,
   getBalance, getMiniStatement, changePin,
   processWithdrawal, processDeposit, processTransfer, processCheckDeposit,
   adminGetAllCards, adminGetAuditLogs, adminGetSecurityAlerts,
-  adminGetHealth, adminLockCard, adminUnlockCard,
+  adminGetTransactions, adminGetHealth, adminLockCard, adminUnlockCard,
+  adminDeleteCustomer, adminSetAtmOutOfOrder, adminSetAtmOnline, adminRefillCash,
 } = require('./business-logic');
 
 /* ─────────────────────────────────────────────
@@ -97,6 +101,7 @@ const authLimiter = rateLimit({
 app.use('/api/', globalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/admin/login', authLimiter);
+app.use('/api/maintenance/login', authLimiter);
 
 /* ─────────────────────────────────────────────
    ROUTE DEFINITIONS
@@ -107,13 +112,14 @@ const router = express.Router();
 // ── Public Auth Routes ───────────────────────────────────────
 /**
  * POST /api/auth/register
- * Body: { email, pin, holderName?, accountType? }
+ * Body: { email, pin, holderName?, accountType?, phoneNumber }
  */
 router.post(
   '/auth/register',
   validateInput({
-    email: (v) => /^\S+@\S+\.\S+$/.test(v),
-    pin:   (v) => /^\d{4,6}$/.test(String(v)),
+    email:       (v) => /^\S+@\S+\.\S+$/.test(v),
+    pin:         (v) => /^\d{4,6}$/.test(String(v)),
+    phoneNumber: (v) => /^\d{10,15}$/.test(String(v).replace(/\D/g, '')),
   }),
   registerCard
 );
@@ -130,6 +136,35 @@ router.post(
     pin:        (v) => /^\d{4,6}$/.test(String(v)),
   }),
   loginWithPin
+);
+
+/**
+ * POST /api/auth/recover-card
+ * Body: { email, phoneNumber }
+ * Recover forgotten card number using email and registered phone number.
+ */
+router.post(
+  '/auth/recover-card',
+  validateInput({
+    email:       (v) => /^\S+@\S+\.\S+$/.test(v),
+    phoneNumber: (v) => /^\d{10,15}$/.test(String(v).replace(/\D/g, '')),
+  }),
+  recoverCardNumber
+);
+
+/**
+ * POST /api/auth/reset-pin
+ * Body: { email, phoneNumber, newPin }
+ * Reset forgotten PIN using email and registered phone number.
+ */
+router.post(
+  '/auth/reset-pin',
+  validateInput({
+    email:       (v) => /^\S+@\S+\.\S+$/.test(v),
+    phoneNumber: (v) => /^\d{10,15}$/.test(String(v).replace(/\D/g, '')),
+    newPin:      (v) => /^\d{4,6}$/.test(String(v)),
+  }),
+  resetPinWithPhone
 );
 
 // ── Protected Account Routes (require JWT) ───────────────────
@@ -156,6 +191,40 @@ router.post(
   }),
   changePin
 );
+
+// ── Protected Biometric Routes (require JWT) ────────────────
+/**
+ * POST /api/account/biometric/setup
+ * Body: { biometricType } — 'FINGERPRINT' or 'FACE'
+ */
+router.post(
+  '/account/biometric/setup',
+  verifyToken,
+  validateInput({
+    biometricType: (v) => ['FINGERPRINT', 'FACE'].includes(String(v)),
+  }),
+  setupBiometric
+);
+
+/**
+ * POST /api/account/biometric/verify
+ * Body: { cardNumber, biometricToken }
+ * Used during login or transaction verification.
+ */
+router.post(
+  '/account/biometric/verify',
+  validateInput({
+    cardNumber:   (v) => /^\d{16}$/.test(String(v)),
+    biometricToken: (v) => typeof v === 'string' && v.length > 0,
+  }),
+  verifyBiometric
+);
+
+/**
+ * POST /api/account/biometric/disable
+ * Disable biometric authentication for this card.
+ */
+router.post('/account/biometric/disable', verifyToken, disableBiometric);
 
 // ── Protected Transaction Routes (require JWT) ───────────────
 /**
@@ -231,11 +300,59 @@ router.get('/admin/security-alerts', verifyAdmin, adminGetSecurityAlerts);
 /** GET /api/admin/health */
 router.get('/admin/health', verifyAdmin, adminGetHealth);
 
+/** GET /api/admin/transactions?limit=100&skip=0 */
+router.get('/admin/transactions', verifyAdmin, adminGetTransactions);
+
 /** PUT /api/admin/cards/:cardNumber/lock */
 router.put('/admin/cards/:cardNumber/lock', verifyAdmin, adminLockCard);
 
 /** PUT /api/admin/cards/:cardNumber/unlock */
 router.put('/admin/cards/:cardNumber/unlock', verifyAdmin, adminUnlockCard);
+
+/** DELETE /api/admin/cards/:cardNumber */
+router.delete('/admin/cards/:cardNumber', verifyAdmin, adminDeleteCustomer);
+
+/** POST /api/admin/atm/out-of-order */
+router.post('/admin/atm/out-of-order', verifyAdmin, adminSetAtmOutOfOrder);
+
+/** POST /api/admin/atm/online */
+router.post('/admin/atm/online', verifyAdmin, adminSetAtmOnline);
+
+/** POST /api/admin/atm/refill */
+router.post(
+  '/admin/atm/refill',
+  verifyAdmin,
+  validateInput({ amount: (v) => !isNaN(v) && parseFloat(v) > 0 }),
+  adminRefillCash
+);
+
+// ── Maintenance Routes (technician) ────────────────────────
+router.post(
+  '/maintenance/login',
+  validateInput({
+    username: (v) => typeof v === 'string' && v.length > 0,
+    password: (v) => typeof v === 'string' && v.length > 0,
+  }),
+  maintenanceLogin
+);
+
+router.get('/maintenance/diagnostics', verifyMaintenance, maintenanceDiagnostics);
+router.get('/maintenance/error-logs', verifyMaintenance, maintenanceErrorLogs);
+router.post(
+  '/maintenance/status',
+  verifyMaintenance,
+  validateInput({ online: (v) => typeof v === 'boolean' }),
+  maintenanceUpdateStatus
+);
+router.post(
+  '/maintenance/service-toggle',
+  verifyMaintenance,
+  validateInput({
+    service: (v) => typeof v === 'string' && v.length > 0,
+    enabled: (v) => typeof v === 'boolean',
+  }),
+  maintenanceToggleService
+);
 
 // Mount all routes under /api prefix.
 app.use('/api', router);

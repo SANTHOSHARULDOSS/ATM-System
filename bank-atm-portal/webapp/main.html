@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SecureBank ATM Terminal</title>
+  <meta name="theme-color" content="#0d1117" />
+  <title>SANTHOSH BANK ATM</title>
+  <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="main-style.css" />
 </head>
 <body>
@@ -18,11 +20,12 @@
       <div class="bank-logo">
         <span class="bank-icon">🏦</span>
         <div class="bank-name-group">
-          <span class="bank-name">SecureBank</span>
-          <span class="bank-tagline">Trusted Since 1987</span>
+          <span class="bank-name">SANTHOSH BANK ATM</span>
+          <span class="bank-tagline">Since 2026</span>
         </div>
       </div>
       <div class="atm-status">
+        <button class="theme-toggle" id="btnThemeToggle" title="Toggle theme">🌙</button>
         <span class="status-dot" id="statusDot"></span>
         <span id="statusText">ONLINE</span>
       </div>
@@ -39,7 +42,19 @@
       <!-- ====================================================
            VIEW: WELCOME / CARD INSERT
            ==================================================== -->
-      <section class="view active" id="view-welcome">
+      <section class="view active" id="view-language">
+        <div class="welcome-content">
+          <h1 class="screen-title">Choose Language</h1>
+          <p class="screen-subtitle">தயவுசெய்து மொழியைத் தேர்ந்தெடுக்கவும் · कृपया भाषा चुनें</p>
+          <div class="menu-grid language-grid">
+            <button class="menu-btn" id="btnLangEnglish">English</button>
+            <button class="menu-btn" id="btnLangTamil">தமிழ்</button>
+            <button class="menu-btn" id="btnLangHindi">हिन्दी</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-welcome">
         <div class="welcome-content">
           <div class="atm-animation">
             <div class="card-slot-visual">
@@ -65,7 +80,9 @@
           </div>
           <button class="btn btn-primary" id="btnInsertCard">Insert Card</button>
           <button class="btn btn-ghost" id="btnGoRegister">New Customer? Register Here</button>
+          <button class="btn btn-ghost" id="btnChangeLanguage">← Change Language</button>
           <button class="btn btn-admin-link" id="btnGoAdmin">Admin Portal</button>
+          <button class="btn btn-admin-link" id="btnGoMaintenance">Maintenance</button>
         </div>
       </section>
 
@@ -150,6 +167,14 @@
             <button class="menu-btn" id="btnChangePin">
               <span class="menu-icon">🔑</span>
               <span>Change PIN</span>
+            </button>
+            <button class="menu-btn" id="btnBiometric">
+              <span class="menu-icon">🔐</span>
+              <span>Biometric Security</span>
+            </button>
+            <button class="menu-btn" id="btnMenuLanguage">
+              <span class="menu-icon">🌐</span>
+              <span>Change Language</span>
             </button>
             <button class="menu-btn menu-btn-exit" id="btnExit">
               <span class="menu-icon">⏏</span>
@@ -293,6 +318,10 @@
             <input type="email" id="regEmail" class="atm-input" placeholder="jane@email.com" />
           </div>
           <div class="input-group">
+            <label for="regPhone">Mobile Number (for card recovery)</label>
+            <input type="tel" id="regPhone" class="atm-input" placeholder="+1 555 123 4567" inputmode="numeric" />
+          </div>
+          <div class="input-group">
             <label for="regPin">Choose PIN (4–6 digits)</label>
             <input type="password" id="regPin" class="atm-input" maxlength="6" inputmode="numeric" />
           </div>
@@ -307,6 +336,50 @@
           <div class="amount-actions">
             <button class="btn btn-primary" id="btnRegisterSubmit">Create Account</button>
             <button class="btn btn-ghost" id="btnCancelRegister">← Back</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================
+           VIEW: BIOMETRIC SETUP
+           ==================================================== -->
+      <section class="view" id="view-biometric-setup">
+        <div class="biometric-content">
+          <h1 class="screen-title">🔐 Enable Biometric Security</h1>
+          <p class="screen-subtitle">Add an extra layer of security to your account.</p>
+          <div class="biometric-options">
+            <button class="biometric-btn" id="btnFingerprint">
+              <span class="biometric-icon">👆</span>
+              <span class="biometric-label">Fingerprint</span>
+            </button>
+            <button class="biometric-btn" id="btnFaceRecognition">
+              <span class="biometric-icon">😊</span>
+              <span class="biometric-label">Face Recognition</span>
+            </button>
+          </div>
+          <p class="biometric-note">✓ Biometric verification required for high-value transactions.</p>
+          <div class="amount-actions">
+            <button class="btn btn-ghost" id="btnSkipBiometric">← Skip for Now</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================
+           VIEW: BIOMETRIC VERIFICATION
+           ==================================================== -->
+      <section class="view" id="view-biometric-verify">
+        <div class="biometric-content">
+          <div class="biometric-scanner">
+            <div class="scanner-animation" id="scannerAnimation"></div>
+          </div>
+          <h1 class="screen-title" id="bioVerifyTitle">Verify Your Fingerprint</h1>
+          <p class="screen-subtitle">Place your finger on the scanner...</p>
+          <div class="biometric-progress">
+            <div class="progress-bar" id="bioProgressBar"></div>
+          </div>
+          <div class="amount-actions">
+            <button class="btn btn-ghost" id="btnBioContinue">✓ Verified</button>
+            <button class="btn btn-ghost" id="btnBioCancel">Cancel</button>
           </div>
         </div>
       </section>
@@ -353,7 +426,19 @@
               <div class="admin-table-wrap" id="alertsTable"></div>
             </div>
             <div class="admin-panel hidden" id="adminHealth">
-              <button class="btn btn-sm btn-primary" id="btnLoadHealth">Refresh Health</button>
+              <div class="amount-actions">
+                <button class="btn btn-sm btn-primary" id="btnLoadHealth">Refresh Health</button>
+                <button class="btn btn-sm btn-primary" id="btnLoadAdminTxns">Load Transactions</button>
+              </div>
+              <div class="amount-actions">
+                <button class="btn btn-sm btn-primary" id="btnAdminSetOutOfOrder">Set Out Of Order</button>
+                <button class="btn btn-sm btn-primary" id="btnAdminSetOnline">Set Online</button>
+              </div>
+              <div class="input-group">
+                <label for="adminRefillAmount">Refill Amount</label>
+                <input type="number" id="adminRefillAmount" class="atm-input" min="1" step="0.01" placeholder="5000" />
+              </div>
+              <button class="btn btn-sm btn-primary" id="btnAdminRefill">Refill Cash</button>
               <div id="healthData" class="health-grid"></div>
             </div>
             <button class="btn btn-ghost btn-sm" id="btnAdminLogout">Sign Out</button>
@@ -361,9 +446,64 @@
         </div>
       </section>
 
+      <!-- ====================================================
+           VIEW: MAINTENANCE
+           ==================================================== -->
+      <section class="view" id="view-maintenance">
+        <div class="admin-content">
+          <h1 class="screen-title admin-title">🛠 Maintenance</h1>
+
+          <div id="maintenanceLoginPanel">
+            <div class="input-group">
+              <label for="techUser">Technician Username</label>
+              <input type="text" id="techUser" class="atm-input" autocomplete="off" />
+            </div>
+            <div class="input-group">
+              <label for="techPass">Password</label>
+              <input type="password" id="techPass" class="atm-input" />
+            </div>
+            <button class="btn btn-primary" id="btnTechLogin">Sign In</button>
+            <button class="btn btn-ghost" id="btnCancelMaintenance">← Back</button>
+          </div>
+
+          <div id="maintenanceDashboard" class="hidden">
+            <div class="admin-panel">
+              <div class="amount-actions">
+                <button class="btn btn-sm btn-primary" id="btnRunDiagnostics">Run Diagnostics</button>
+                <button class="btn btn-sm btn-primary" id="btnSetOutOfOrder">Set Out Of Order</button>
+                <button class="btn btn-sm btn-primary" id="btnSetOnline">Set Online</button>
+                <button class="btn btn-sm btn-primary" id="btnLoadErrorLogs">Load Error Logs</button>
+              </div>
+              <div class="input-group">
+                <label for="serviceSelect">Service</label>
+                <select id="serviceSelect" class="atm-input atm-select">
+                  <option value="WITHDRAWAL">Withdrawal</option>
+                  <option value="DEPOSIT">Deposit</option>
+                  <option value="TRANSFER">Transfer</option>
+                  <option value="CHECK_DEPOSIT">Check Deposit</option>
+                  <option value="BALANCE">Balance</option>
+                  <option value="STATEMENT">Statement</option>
+                </select>
+              </div>
+              <div class="amount-actions">
+                <button class="btn btn-sm btn-primary" id="btnEnableService">Enable Service</button>
+                <button class="btn btn-sm btn-danger" id="btnDisableService">Disable Service</button>
+              </div>
+              <div class="admin-table-wrap" id="maintenanceData"></div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="btnMaintenanceLogout">Sign Out</button>
+          </div>
+        </div>
+      </section>
+
       <!-- ── TOAST NOTIFICATION ─────────────────────────────── -->
       <div class="toast hidden" id="toast">
         <span id="toastMsg">Message</span>
+      </div>
+
+      <div class="screen-bottom-bar" id="screenBottomBar">
+        <div class="india-datetime" id="indiaDateTime">India Time: --/--/---- --:--:--</div>
+        <div class="bank-ad" id="bankAd">SANTHOSH BANK ATM - Safe Banking, Smart Future.</div>
       </div>
 
     </main>

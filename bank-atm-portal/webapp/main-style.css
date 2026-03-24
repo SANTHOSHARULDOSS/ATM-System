@@ -114,6 +114,16 @@ body {
   letter-spacing: 1px;
 }
 
+.theme-toggle {
+  border: 1px solid var(--clr-border);
+  background: var(--clr-card-bg);
+  color: var(--clr-text);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
@@ -137,6 +147,7 @@ body {
   border-radius: var(--radius);
   min-height: 560px;
   overflow: hidden;
+  padding-bottom: 56px;
   box-shadow: inset 0 0 30px rgba(0,0,0,0.4);
 }
 
@@ -493,6 +504,11 @@ body {
   gap: 0.6rem;
 }
 
+.language-grid {
+  width: 100%;
+  max-width: 340px;
+}
+
 .menu-btn {
   display: flex;
   flex-direction: column;
@@ -772,6 +788,15 @@ body {
 }
 .lock-btn.unlock:hover { background: rgba(0,210,106,0.1); }
 
+.lock-btn.delete {
+  border-color: #ff9f43;
+  color: #ff9f43;
+}
+
+.lock-btn.delete:hover {
+  background: rgba(255, 159, 67, 0.15);
+}
+
 /* Health grid */
 .health-grid {
   display: grid;
@@ -824,6 +849,38 @@ body {
 .toast.toast-error   { border-color: var(--clr-danger);  color: var(--clr-danger);  }
 .toast.toast-warn    { border-color: var(--clr-warning); color: var(--clr-warning); }
 
+.screen-bottom-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  border-top: 1px solid var(--clr-border);
+  background: #0a1520;
+  z-index: 30;
+}
+
+.india-datetime {
+  padding: 0.25rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--clr-success);
+  text-align: center;
+  border-bottom: 1px solid var(--clr-border);
+}
+
+.bank-ad {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.66rem;
+  color: #ffd166;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @keyframes toastIn {
   from { opacity: 0; transform: translateX(-50%) translateY(10px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -863,11 +920,175 @@ body {
   border: 1px solid var(--clr-border);
 }
 
+/* ── BIOMETRIC STYLES ─────────────────────────────────────── */
+.biometric-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.biometric-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  width: 100%;
+}
+
+.biometric-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.2rem 0.8rem;
+  background: linear-gradient(135deg, var(--clr-card-bg) 0%, #1a2635 100%);
+  border: 2px solid var(--clr-primary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--clr-text);
+  font-weight: 600;
+  font-size: 0.75rem;
+  transition: all var(--transition);
+}
+
+.biometric-btn:hover {
+  background: linear-gradient(135deg, var(--clr-primary) 0%, #0055aa 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(30, 144, 255, 0.3);
+}
+
+.biometric-icon {
+  font-size: 2.2rem;
+  display: block;
+}
+
+.biometric-label {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.biometric-note {
+  font-size: 0.7rem;
+  color: var(--clr-text-dim);
+  font-style: italic;
+}
+
+.biometric-scanner {
+  width: 100%;
+  height: 120px;
+  background: radial-gradient(circle at center, rgba(30,144,255,0.1) 0%, transparent 70%);
+  border: 2px dashed var(--clr-primary);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.scanner-animation {
+  width: 80%;
+  height: 40%;
+  background: linear-gradient(90deg, transparent, rgba(30,144,255,0.6), transparent);
+  animation: scan 2s infinite;
+  border-radius: 2px;
+}
+
+@keyframes scan {
+  0% { transform: translateY(-60px); }
+  50% { transform: translateY(60px); }
+  100% { transform: translateY(-60px); }
+}
+
+.biometric-progress {
+  width: 100%;
+  height: 2px;
+  background: var(--clr-border);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--clr-success);
+  width: 0%;
+  animation: progress 3s ease-in-out forwards;
+  border-radius: 1px;
+}
+
+@keyframes progress {
+  0% { width: 0%; }
+  100% { width: 100%; }
+}
+
 /* ── UTILITY ──────────────────────────────────────────────── */
 .hidden { display: none !important; }
+
+/* ── LIGHT THEME ─────────────────────────────────────────── */
+body.theme-light {
+  --clr-shell: #e7edf4;
+  --clr-screen-bg: #f8fafc;
+  --clr-screen-edge: #c7d6e6;
+  --clr-primary: #0b63ce;
+  --clr-primary-dk: #064b9e;
+  --clr-text: #0f172a;
+  --clr-text-dim: #5b6470;
+  --clr-border: #c5d3e0;
+  --clr-input-bg: #ffffff;
+  --clr-card-bg: #eef4fb;
+  background: linear-gradient(160deg, #f5f7fa 0%, #e8eef5 100%);
+}
+
+body.theme-light .atm-header,
+body.theme-light .atm-footer,
+body.theme-light .admin-table th {
+  background: #e9f0f8;
+}
+
+body.theme-light .screen-title,
+body.theme-light .holder-name {
+  color: #0f172a;
+}
+
+/* ── ASPECT-RATIO LAYOUT MODES ──────────────────────────── */
+body.layout-square .atm-shell {
+  width: min(88vmin, 620px);
+  height: min(88vmin, 620px);
+}
+
+body.layout-square .atm-screen {
+  min-height: 0;
+  flex: 1;
+}
+
+body.layout-portrait .atm-shell {
+  width: min(92vw, 450px);
+  height: min(96vh, 880px);
+}
+
+body.layout-landscape .atm-shell {
+  width: min(92vw, 980px);
+  height: min(90vh, 700px);
+}
+
+body.layout-landscape .atm-screen {
+  min-height: 0;
+  flex: 1;
+}
 
 /* Responsive tweaks for small screens */
 @media (max-width: 440px) {
   .atm-shell { width: 100%; border-radius: 12px; margin: 0; }
   body { padding: 0; align-items: flex-start; }
+  .menu-grid,
+  .biometric-options,
+  .health-grid {
+    grid-template-columns: 1fr;
+  }
+  .amount-actions {
+    flex-direction: column;
+  }
 }

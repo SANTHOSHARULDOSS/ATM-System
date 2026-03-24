@@ -138,6 +138,15 @@ class AuditLogDAO {
       .limit(200)
       .select('-__v');
   }
+
+  /**
+   * Deletes logs for a given card number.
+   * @param {string} cardNumber
+   * @returns {Promise<{deletedCount:number}>}
+   */
+  static async deleteByCard(cardNumber) {
+    return AuditLogModel.deleteMany({ cardNumber });
+  }
 }
 
 module.exports = { AuditLogDAO, AuditLogModel };

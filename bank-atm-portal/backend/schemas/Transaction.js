@@ -155,6 +155,29 @@ class TransactionDAO {
       { new: true }
     );
   }
+
+  /**
+   * Returns recent system transactions for admin dashboards.
+   * @param {number} limit
+   * @param {number} skip
+   * @returns {Promise<Array>}
+   */
+  static async getRecent(limit = 100, skip = 0) {
+    return TransactionModel.find({})
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select('-__v');
+  }
+
+  /**
+   * Deletes all transactions for a card.
+   * @param {string} cardNumber
+   * @returns {Promise<{deletedCount:number}>}
+   */
+  static async deleteByCardNumber(cardNumber) {
+    return TransactionModel.deleteMany({ cardNumber });
+  }
 }
 
 module.exports = { TransactionDAO, TransactionModel };

@@ -29,7 +29,7 @@ const bcrypt = require('bcryptjs');
 const { CardDAO }        = require('./schemas/Card');
 const { TransactionDAO } = require('./schemas/Transaction');
 const { AuditLogDAO }    = require('./schemas/AuditLog');
-const { issueToken, issueAdminToken } = require('./authentication');
+const { issueToken, issueAdminToken, issueMaintenanceToken } = require('./authentication');
 
 /* ═══════════════════════════════════════════════════════════
    SECTION 1 — SINGLETON: ATMMachine
@@ -48,6 +48,12 @@ class ATMMachine {
     /** Indicates whether the ATM is accepting transactions. */
     this.isOnline = true;
 
+    /** Unique machine number shown for support/lost card workflows. */
+    this.machineNumber = process.env.ATM_MACHINE_NUMBER || 'ATM-001';
+
+    /** Human-readable reason while ATM is out of order. */
+    this.outOfOrderReason = null;
+
     /** Physical cash remaining in the ATM's dispenser. */
     this.cashAvailable = parseFloat(process.env.ATM_INITIAL_CASH) || 100000.00;
 
@@ -56,6 +62,19 @@ class ATMMachine {
 
     /** ISO timestamp of when the ATM service last started. */
     this.bootTime = new Date().toISOString();
+
+    /** Feature-level service toggles controlled by maintenance. */
+    this.services = {
+      WITHDRAWAL: true,
+      DEPOSIT: true,
+      TRANSFER: true,
+      CHECK_DEPOSIT: true,
+      BALANCE: true,
+      STATEMENT: true,
+    };
+
+    /** Rolling in-memory machine error log for diagnostics. */
+    this.errorLogs = [];
 
     ATMMachine._instance = this;
     // Note: not frozen — mutable state (cashAvailable, sessionTransactionCount)
@@ -73,10 +92,13 @@ class ATMMachine {
    */
   getHealth() {
     return {
+      machineNumber: this.machineNumber,
       isOnline: this.isOnline,
+      outOfOrderReason: this.outOfOrderReason,
       cashAvailable: this.cashAvailable,
       sessionTransactionCount: this.sessionTransactionCount,
       bootTime: this.bootTime,
+      services: this.services,
       uptime: process.uptime(),
       memoryUsageMB: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2),
     };
@@ -112,6 +134,63 @@ class ATMMachine {
   acceptCash(amount) {
     this.cashAvailable += amount;
     this.sessionTransactionCount++;
+  }
+
+  setOutOfOrder(reason = 'Maintenance') {
+    this.isOnline = false;
+    this.outOfOrderReason = reason;
+    this.logError('ATM_OUT_OF_ORDER', reason, 'WARNING');
+  }
+
+  setOnline() {
+    this.isOnline = true;
+    this.outOfOrderReason = null;
+  }
+
+  refillCash(amount) {
+    const refillAmount = parseFloat(amount);
+    if (isNaN(refillAmount) || refillAmount <= 0) {
+      throw new Error('Refill amount must be a positive number.');
+    }
+    this.cashAvailable += refillAmount;
+    return this.cashAvailable;
+  }
+
+  enableService(serviceName) {
+    if (!(serviceName in this.services)) throw new Error(`Unknown service '${serviceName}'.`);
+    this.services[serviceName] = true;
+  }
+
+  disableService(serviceName) {
+    if (!(serviceName in this.services)) throw new Error(`Unknown service '${serviceName}'.`);
+    this.services[serviceName] = false;
+  }
+
+  isServiceEnabled(serviceName) {
+    return Boolean(this.services[serviceName]);
+  }
+
+  logError(code, message, severity = 'WARNING') {
+    this.errorLogs.unshift({
+      code,
+      message,
+      severity,
+      at: new Date().toISOString(),
+    });
+    this.errorLogs = this.errorLogs.slice(0, 200);
+  }
+
+  runDiagnostics() {
+    return {
+      machineNumber: this.machineNumber,
+      isOnline: this.isOnline,
+      cashModule: this.cashAvailable > 0 ? 'OK' : 'LOW/EMPTY',
+      network: 'OK',
+      memoryUsageMB: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2),
+      services: this.services,
+      lastErrors: this.errorLogs.slice(0, 20),
+      checkedAt: new Date().toISOString(),
+    };
   }
 }
 
@@ -500,6 +579,20 @@ async function generateUniqueCardNumber() {
   return cardNumber;
 }
 
+function ensureAtmServiceAvailable(serviceName) {
+  if (!atmMachineInstance.isOnline) {
+    const reason = atmMachineInstance.outOfOrderReason || 'ATM is currently out of order.';
+    const err = new Error(reason);
+    err.status = 503;
+    throw err;
+  }
+  if (!atmMachineInstance.isServiceEnabled(serviceName)) {
+    const err = new Error(`${serviceName.replace('_', ' ')} service is currently unavailable.`);
+    err.status = 503;
+    throw err;
+  }
+}
+
 
 /* ═══════════════════════════════════════════════════════════
    SECTION 6 — MVC CONTROLLERS
@@ -522,7 +615,7 @@ async function generateUniqueCardNumber() {
  */
 const registerCard = async (req, res, next) => {
   try {
-    const { email, pin, holderName, accountType } = req.body;
+    const { email, pin, holderName, accountType, phoneNumber } = req.body;
 
     // Prevent duplicate registrations.
     const existing = await CardDAO.findByEmail(email);
@@ -535,6 +628,11 @@ const registerCard = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'PIN must be 4 to 6 digits.' });
     }
 
+    // Validate phone number: 10–15 digits.
+    if (!phoneNumber || !/^\d{10,15}$/.test(phoneNumber.replace(/\D/g, ''))) {
+      return res.status(400).json({ success: false, message: 'Phone number must be 10 to 15 digits.' });
+    }
+
     const cardNumber = await generateUniqueCardNumber();
     const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12;
     const pinHash = await bcrypt.hash(String(pin), saltRounds);
@@ -545,6 +643,8 @@ const registerCard = async (req, res, next) => {
       pinHash,
       holderName: holderName || 'Account Holder',
       accountType: accountType || 'SAVINGS',
+      phoneNumber: phoneNumber.replace(/\D/g, ''),  // Store only digits
+      atmMachineNumber: atmMachineInstance.machineNumber,
     });
 
     // Notify observers — registration is an auditable event.
@@ -564,6 +664,8 @@ const registerCard = async (req, res, next) => {
         email: card.email,
         accountType: card.accountType,
         holderName: card.holderName,
+        phoneNumber: card.phoneNumber,
+        atmMachineNumber: card.atmMachineNumber,
         balance: card.balance,
       },
     });
@@ -580,6 +682,13 @@ const registerCard = async (req, res, next) => {
 const loginWithPin = async (req, res, next) => {
   try {
     const { cardNumber, pin } = req.body;
+
+    if (!atmMachineInstance.isOnline) {
+      return res.status(503).json({
+        success: false,
+        message: atmMachineInstance.outOfOrderReason || 'ATM is temporarily out of order.',
+      });
+    }
 
     const card = await CardDAO.findByCardNumber(cardNumber);
 
@@ -706,6 +815,7 @@ const adminLogin = async (req, res, next) => {
  */
 const getBalance = async (req, res, next) => {
   try {
+    ensureAtmServiceAvailable('BALANCE');
     const card = await CardDAO.findByCardNumber(req.user.cardNumber);
     if (!card) return res.status(404).json({ success: false, message: 'Account not found.' });
 
@@ -738,6 +848,7 @@ const getBalance = async (req, res, next) => {
  */
 const getMiniStatement = async (req, res, next) => {
   try {
+    ensureAtmServiceAvailable('STATEMENT');
     const transactions = await TransactionDAO.getMiniStatement(req.user.cardNumber, 10);
     const pending      = transactions.filter((t) => t.status === 'PENDING');
 
@@ -812,6 +923,7 @@ const changePin = async (req, res, next) => {
  */
 const processWithdrawal = async (req, res, next) => {
   try {
+    ensureAtmServiceAvailable('WITHDRAWAL');
     const { amount } = req.body;
     const { cardNumber } = req.user;
 
@@ -865,6 +977,7 @@ const processWithdrawal = async (req, res, next) => {
  */
 const processDeposit = async (req, res, next) => {
   try {
+    ensureAtmServiceAvailable('DEPOSIT');
     const { amount } = req.body;
     const { cardNumber } = req.user;
 
@@ -911,6 +1024,7 @@ const processDeposit = async (req, res, next) => {
  */
 const processTransfer = async (req, res, next) => {
   try {
+    ensureAtmServiceAvailable('TRANSFER');
     const { amount, targetCardNumber } = req.body;
     const { cardNumber } = req.user;
 
@@ -970,6 +1084,7 @@ const processTransfer = async (req, res, next) => {
  */
 const processCheckDeposit = async (req, res, next) => {
   try {
+    ensureAtmServiceAvailable('CHECK_DEPOSIT');
     const { amount, description } = req.body;
     const { cardNumber } = req.user;
 
@@ -1073,6 +1188,457 @@ const adminUnlockCard = async (req, res, next) => {
   } catch (error) { next(error); }
 };
 
+const adminDeleteCustomer = async (req, res, next) => {
+  try {
+    const { cardNumber } = req.params;
+    const card = await CardDAO.deleteByCardNumber(cardNumber);
+    if (!card) return res.status(404).json({ success: false, message: 'Card not found.' });
+
+    await Promise.all([
+      TransactionDAO.deleteByCardNumber(cardNumber),
+      AuditLogDAO.deleteByCard(cardNumber),
+    ]);
+
+    await transactionSubject.notify('ADMIN_ACCOUNT_DELETED', {
+      cardNumber,
+      admin: req.admin?.username,
+      ipAddress: req.ip,
+      severity: 'CRITICAL',
+    });
+
+    res.json({
+      success: true,
+      message: `Customer account ...${cardNumber.slice(-4)} deleted successfully.`,
+    });
+  } catch (error) { next(error); }
+};
+
+const adminSetAtmOutOfOrder = async (req, res, next) => {
+  try {
+    const { reason } = req.body;
+    atmMachineInstance.setOutOfOrder(reason || 'ATM marked out of order by admin.');
+
+    await transactionSubject.notify('ADMIN_SET_OUT_OF_ORDER', {
+      admin: req.admin?.username,
+      reason: atmMachineInstance.outOfOrderReason,
+      ipAddress: req.ip,
+      severity: 'WARNING',
+    });
+
+    res.json({
+      success: true,
+      message: 'ATM status updated to OUT OF ORDER.',
+      data: atmMachineInstance.getHealth(),
+    });
+  } catch (error) { next(error); }
+};
+
+const adminSetAtmOnline = async (req, res, next) => {
+  try {
+    atmMachineInstance.setOnline();
+
+    await transactionSubject.notify('ADMIN_SET_ATM_ONLINE', {
+      admin: req.admin?.username,
+      ipAddress: req.ip,
+      severity: 'INFO',
+    });
+
+    res.json({
+      success: true,
+      message: 'ATM status updated to ONLINE.',
+      data: atmMachineInstance.getHealth(),
+    });
+  } catch (error) { next(error); }
+};
+
+const adminRefillCash = async (req, res, next) => {
+  try {
+    const { amount } = req.body;
+    const newCashLevel = atmMachineInstance.refillCash(amount);
+
+    await transactionSubject.notify('ADMIN_REFILL_CASH', {
+      admin: req.admin?.username,
+      amount,
+      cashAvailable: newCashLevel,
+      ipAddress: req.ip,
+      severity: 'WARNING',
+    });
+
+    res.json({
+      success: true,
+      message: `ATM refilled by $${parseFloat(amount).toFixed(2)}.`,
+      data: { cashAvailable: newCashLevel, machineNumber: atmMachineInstance.machineNumber },
+    });
+  } catch (error) {
+    if (error.message.includes('Refill amount')) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    next(error);
+  }
+};
+
+const adminGetTransactions = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const skip = parseInt(req.query.skip) || 0;
+    const transactions = await TransactionDAO.getRecent(limit, skip);
+    res.json({ success: true, data: { count: transactions.length, transactions } });
+  } catch (error) { next(error); }
+};
+
+const maintenanceLogin = async (req, res, next) => {
+  try {
+    const { username, password } = req.body;
+    if (
+      username !== process.env.MAINTENANCE_USERNAME ||
+      password !== process.env.MAINTENANCE_PASSWORD
+    ) {
+      await transactionSubject.notify('MAINTENANCE_LOGIN_FAILED', {
+        username,
+        ipAddress: req.ip,
+        severity: 'CRITICAL',
+      });
+      return res.status(401).json({ success: false, message: 'Invalid maintenance credentials.' });
+    }
+
+    const token = issueMaintenanceToken({ username });
+    await transactionSubject.notify('MAINTENANCE_LOGIN', {
+      username,
+      ipAddress: req.ip,
+      severity: 'WARNING',
+    });
+
+    res.json({ success: true, message: 'Maintenance session started.', token });
+  } catch (error) { next(error); }
+};
+
+const maintenanceDiagnostics = async (req, res, next) => {
+  try {
+    res.json({ success: true, data: atmMachineInstance.runDiagnostics() });
+  } catch (error) { next(error); }
+};
+
+const maintenanceUpdateStatus = async (req, res, next) => {
+  try {
+    const { online, reason } = req.body;
+    if (online === true) {
+      atmMachineInstance.setOnline();
+    } else {
+      atmMachineInstance.setOutOfOrder(reason || 'Set by maintenance technician.');
+    }
+
+    await transactionSubject.notify('MAINTENANCE_STATUS_UPDATED', {
+      technician: req.technician?.username,
+      online: atmMachineInstance.isOnline,
+      reason: atmMachineInstance.outOfOrderReason,
+      ipAddress: req.ip,
+      severity: 'WARNING',
+    });
+
+    res.json({ success: true, data: atmMachineInstance.getHealth() });
+  } catch (error) { next(error); }
+};
+
+const maintenanceToggleService = async (req, res, next) => {
+  try {
+    const { service, enabled } = req.body;
+    const serviceName = String(service || '').toUpperCase();
+
+    if (enabled) atmMachineInstance.enableService(serviceName);
+    else atmMachineInstance.disableService(serviceName);
+
+    await transactionSubject.notify('MAINTENANCE_SERVICE_TOGGLED', {
+      technician: req.technician?.username,
+      service: serviceName,
+      enabled: Boolean(enabled),
+      ipAddress: req.ip,
+      severity: 'WARNING',
+    });
+
+    res.json({ success: true, data: atmMachineInstance.getHealth() });
+  } catch (error) {
+    if (error.message.includes('Unknown service')) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+    next(error);
+  }
+};
+
+const maintenanceErrorLogs = async (req, res, next) => {
+  try {
+    res.json({ success: true, data: { machineNumber: atmMachineInstance.machineNumber, logs: atmMachineInstance.errorLogs } });
+  } catch (error) { next(error); }
+};
+
+/**
+ * recoverCardNumber
+ * Allows customer to recover their card number using email + phone number.
+ * Used when customer forgets their 16-digit card number.
+ */
+const recoverCardNumber = async (req, res, next) => {
+  try {
+    const { email, phoneNumber } = req.body;
+
+    if (!email || !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and phone number are required for card recovery.',
+      });
+    }
+
+    // Find card by email
+    const card = await CardDAO.findByEmail(email);
+    if (!card) {
+      // Don't reveal if account exists or not (security)
+      return res.status(404).json({
+        success: false,
+        message: 'No account found matching the provided email and phone number.',
+      });
+    }
+
+    // Verify phone number matches
+    const normalizedInputPhone = phoneNumber.replace(/\D/g, '');
+    const normalizedCardPhone = card.phoneNumber.replace(/\D/g, '');
+
+    if (normalizedInputPhone !== normalizedCardPhone) {
+      return res.status(403).json({
+        success: false,
+        message: 'No account found matching the provided email and phone number.',
+      });
+    }
+
+    // Log recovery attempt
+    await transactionSubject.notify('CARD_RECOVERY_ATTEMPT', {
+      cardNumber: card.cardNumber,
+      email,
+      ipAddress: req.ip,
+      severity: 'INFO',
+    });
+
+    res.json({
+      success: true,
+      message: 'Card number recovered successfully.',
+      data: {
+        cardNumber: card.cardNumber,
+        accountType: card.accountType,
+        holderName: card.holderName,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * resetPinWithPhone
+ * Allows customer to reset their PIN using email + phone number verification.
+ */
+const resetPinWithPhone = async (req, res, next) => {
+  try {
+    const { email, phoneNumber, newPin } = req.body;
+
+    if (!email || !phoneNumber || !newPin) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, phone number, and new PIN are required.',
+      });
+    }
+
+    if (!/^\d{4,6}$/.test(newPin)) {
+      return res.status(400).json({
+        success: false,
+        message: 'PIN must be 4 to 6 digits.',
+      });
+    }
+
+    // Find card by email
+    const card = await CardDAO.findByEmail(email);
+    if (!card) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found matching the provided email and phone number.',
+      });
+    }
+
+    // Verify phone number
+    const normalizedInputPhone = phoneNumber.replace(/\D/g, '');
+    const normalizedCardPhone = card.phoneNumber.replace(/\D/g, '');
+
+    if (normalizedInputPhone !== normalizedCardPhone) {
+      return res.status(403).json({
+        success: false,
+        message: 'Phone number does not match the registered account.',
+      });
+    }
+
+    // Hash and update PIN
+    const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12;
+    const pinHash = await bcrypt.hash(String(newPin), saltRounds);
+    const updatedCard = await CardDAO.update(card.cardNumber, { pinHash });
+
+    // Log PIN reset
+    await transactionSubject.notify('PIN_RESET_WITH_PHONE', {
+      cardNumber: card.cardNumber,
+      email,
+      ipAddress: req.ip,
+      severity: 'WARNING',
+    });
+
+    res.json({
+      success: true,
+      message: 'PIN has been reset successfully. Please use your new PIN to login.',
+      data: {
+        cardNumber: updatedCard.cardNumber,
+        email: updatedCard.email,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * setupBiometric
+ * Allow authenticated user to enable biometric verification (fingerprint or face).
+ */
+const setupBiometric = async (req, res, next) => {
+  try {
+    const { cardNumber } = req.user;
+    const { biometricType } = req.body;
+
+    if (!['FINGERPRINT', 'FACE'].includes(biometricType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Biometric type must be FINGERPRINT or FACE.',
+      });
+    }
+
+    // Simulate biometric enrollment by storing a token
+    const biometricData = `${biometricType}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    const updatedCard = await CardDAO.update(cardNumber, {
+      biometricEnabled: true,
+      biometricType,
+      biometricData,
+    });
+
+    await transactionSubject.notify('BIOMETRIC_ENABLED', {
+      cardNumber,
+      biometricType,
+      ipAddress: req.ip,
+      severity: 'INFO',
+    });
+
+    res.json({
+      success: true,
+      message: `${biometricType} biometric authentication has been enabled.`,
+      data: {
+        cardNumber: updatedCard.cardNumber,
+        biometricEnabled: updatedCard.biometricEnabled,
+        biometricType: updatedCard.biometricType,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * verifyBiometric
+ * Verify user's biometric during login or high-value transaction.
+ * For web simulation, this is a token verification check.
+ */
+const verifyBiometric = async (req, res, next) => {
+  try {
+    const { cardNumber, biometricToken } = req.body;
+
+    if (!cardNumber || !biometricToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Card number and biometric token are required.',
+      });
+    }
+
+    const card = await CardDAO.findByCardNumber(cardNumber);
+    if (!card) {
+      return res.status(404).json({
+        success: false,
+        message: 'Card not found.',
+      });
+    }
+
+    if (!card.biometricEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Biometric authentication is not enabled for this card.',
+      });
+    }
+
+    // Simulate biometric verification
+    // In a real system, this would verify against hardware biometric sensors
+    const isValid = biometricToken === 'VERIFIED' || biometricToken === card.biometricData.split('_')[0];
+
+    if (!isValid) {
+      return res.status(403).json({
+        success: false,
+        message: 'Biometric verification failed. Please try again.',
+      });
+    }
+
+    await transactionSubject.notify('BIOMETRIC_VERIFIED', {
+      cardNumber,
+      biometricType: card.biometricType,
+      ipAddress: req.ip,
+      severity: 'INFO',
+    });
+
+    res.json({
+      success: true,
+      message: `${card.biometricType} biometric verified successfully.`,
+      data: {
+        cardNumber,
+        biometricType: card.biometricType,
+        verified: true,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * disableBiometric
+ * Allow user to disable biometric authentication.
+ */
+const disableBiometric = async (req, res, next) => {
+  try {
+    const { cardNumber } = req.user;
+
+    const updatedCard = await CardDAO.update(cardNumber, {
+      biometricEnabled: false,
+      biometricType: 'NONE',
+      biometricData: null,
+    });
+
+    await transactionSubject.notify('BIOMETRIC_DISABLED', {
+      cardNumber,
+      ipAddress: req.ip,
+      severity: 'INFO',
+    });
+
+    res.json({
+      success: true,
+      message: 'Biometric authentication has been disabled.',
+      data: {
+        cardNumber: updatedCard.cardNumber,
+        biometricEnabled: updatedCard.biometricEnabled,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 /* ── EXPORTS ────────────────────────────────────────────────── */
 
@@ -1081,6 +1647,12 @@ module.exports = {
   registerCard,
   loginWithPin,
   adminLogin,
+  recoverCardNumber,
+  resetPinWithPhone,
+  // Biometric
+  setupBiometric,
+  verifyBiometric,
+  disableBiometric,
   // Account
   getBalance,
   getMiniStatement,
@@ -1094,9 +1666,20 @@ module.exports = {
   adminGetAllCards,
   adminGetAuditLogs,
   adminGetSecurityAlerts,
+  adminGetTransactions,
   adminGetHealth,
   adminLockCard,
   adminUnlockCard,
+  adminDeleteCustomer,
+  adminSetAtmOutOfOrder,
+  adminSetAtmOnline,
+  adminRefillCash,
+  // Maintenance
+  maintenanceLogin,
+  maintenanceDiagnostics,
+  maintenanceUpdateStatus,
+  maintenanceToggleService,
+  maintenanceErrorLogs,
   // Utilities (exported for testing)
   generateCardNumber,
   validateLuhn,

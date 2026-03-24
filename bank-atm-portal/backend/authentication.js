@@ -138,6 +138,41 @@ const verifyAdmin = (req, res, next) => {
   }
 };
 
+/**
+ * verifyMaintenance
+ * Validates maintenance JWT with TECHNICIAN role.
+ */
+const verifyMaintenance = (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Maintenance authentication required.',
+      });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.role !== 'TECHNICIAN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access forbidden. Technician privileges required.',
+      });
+    }
+
+    req.technician = decoded;
+    next();
+  } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: 'Maintenance session expired.' });
+    }
+    return res.status(401).json({ success: false, message: 'Invalid maintenance token.' });
+  }
+};
+
 /* ─────────────────────────────────────────────
    3. INPUT VALIDATION MIDDLEWARE
    ───────────────────────────────────────────── */
@@ -254,11 +289,24 @@ const issueAdminToken = (payload) => {
   });
 };
 
+/**
+ * Issues a maintenance JWT (4-hour expiry).
+ * @param {Object} payload
+ * @returns {string}
+ */
+const issueMaintenanceToken = (payload) => {
+  return jwt.sign({ ...payload, role: 'TECHNICIAN' }, process.env.JWT_SECRET, {
+    expiresIn: '4h',
+  });
+};
+
 module.exports = {
   verifyToken,
   verifyAdmin,
+  verifyMaintenance,
   validateInput,
   errorHandler,
   issueToken,
   issueAdminToken,
+  issueMaintenanceToken,
 };
