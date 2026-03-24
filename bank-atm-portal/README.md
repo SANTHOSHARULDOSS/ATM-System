@@ -70,6 +70,49 @@ Navigate to: **http://localhost:3000**
 
 ---
 
+## Deploy on Render
+
+This repository includes a Render blueprint at [render.yaml](../render.yaml).
+
+### Option A: Blueprint Deploy (Recommended)
+1. Push your repo to GitHub.
+2. In Render Dashboard, click **New +** -> **Blueprint**.
+3. Select your GitHub repository.
+4. Render will read `render.yaml` and create the web service automatically.
+
+### Option B: Manual Web Service
+1. In Render, click **New +** -> **Web Service**.
+2. Select your GitHub repo.
+3. Set **Root Directory** to `bank-atm-portal`.
+4. Set **Build Command** to `npm ci`.
+5. Set **Start Command** to `npm start`.
+
+### Required Environment Variables (Render)
+Set these in Render service settings:
+
+- `MONGODB_URI` = your MongoDB Atlas connection string
+- `MONGODB_DB_NAME` = `atm_system_db`
+- `JWT_SECRET` = a long random secret
+- `ADMIN_USERNAME` = `admin` (or your value)
+- `ADMIN_PASSWORD` = your admin password
+- `MAINTENANCE_USERNAME` = `technician` (or your value)
+- `MAINTENANCE_PASSWORD` = your maintenance password
+- `BCRYPT_SALT_ROUNDS` = `12`
+- `ATM_INITIAL_CASH` = `100000`
+- `ATM_MACHINE_NUMBER` = `ATM-001`
+- `ENABLE_LOCAL_FALLBACK` = `false` (recommended for cloud deploy)
+
+### Atlas Cloud Database Notes
+- In MongoDB Atlas Network Access, allow Render outbound access (for quick demo: `0.0.0.0/0`).
+- Ensure Atlas Database User credentials in `MONGODB_URI` are correct.
+- If Atlas blocks the app, Render logs will show authentication or timeout errors.
+
+### After Deploy
+- Open your Render URL (example: `https://your-service.onrender.com`).
+- ATM web UI is served from the same Express service.
+
+---
+
 ## Using the ATM
 
 ### New Customer

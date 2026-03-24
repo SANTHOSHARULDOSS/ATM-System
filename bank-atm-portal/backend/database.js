@@ -57,27 +57,27 @@ class Database {
       return this._connection;
     }
 
-    const uri = process.env.MONGODB_URI;
-    if (!uri) {
+    const primaryUri = process.env.MONGODB_URI;
+    if (!primaryUri) {
       throw new Error('[Database Singleton] MONGODB_URI is not defined in .env');
     }
 
-    try {
-      const connectOptions = {
-        maxPoolSize: parseInt(process.env.MONGO_MAX_POOL_SIZE || '20', 10),
-        minPoolSize: parseInt(process.env.MONGO_MIN_POOL_SIZE || '5', 10),
-        serverSelectionTimeoutMS: parseInt(process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS || '10000', 10),
-        socketTimeoutMS: parseInt(process.env.MONGO_SOCKET_TIMEOUT_MS || '45000', 10),
-      };
+    const fallbackUri =
+      process.env.MONGODB_URI_FALLBACK ||
+      (process.env.ENABLE_LOCAL_FALLBACK === 'false' ? null : 'mongodb://127.0.0.1:27017/atm_system_db');
 
-      if (process.env.MONGODB_DB_NAME) {
-        connectOptions.dbName = process.env.MONGODB_DB_NAME;
-      }
+    const connectOptions = {
+      maxPoolSize: parseInt(process.env.MONGO_MAX_POOL_SIZE || '20', 10),
+      minPoolSize: parseInt(process.env.MONGO_MIN_POOL_SIZE || '5', 10),
+      serverSelectionTimeoutMS: parseInt(process.env.MONGO_SERVER_SELECTION_TIMEOUT_MS || '10000', 10),
+      socketTimeoutMS: parseInt(process.env.MONGO_SOCKET_TIMEOUT_MS || '45000', 10),
+    };
 
-      this._connection = await mongoose.connect(uri, connectOptions);
-      this._isConnected = true;
+    if (process.env.MONGODB_DB_NAME) {
+      connectOptions.dbName = process.env.MONGODB_DB_NAME;
+    }
 
-      // Attach lifecycle event listeners for observability.
+    const attachConnectionListeners = () => {
       mongoose.connection.on('error', (err) => {
         console.error('[Database Singleton] Runtime error:', err.message);
         this._isConnected = false;
@@ -91,12 +91,31 @@ class Database {
       mongoose.connection.on('connected', () => {
         this._isConnected = true;
       });
+    };
 
-      console.log('[Database Singleton] MongoDB connected successfully.');
+    try {
+      this._connection = await mongoose.connect(primaryUri, connectOptions);
+      this._isConnected = true;
+      attachConnectionListeners();
+      console.log('[Database Singleton] MongoDB connected successfully (primary URI).');
       return this._connection;
-    } catch (error) {
-      console.error('[Database Singleton] Initial connection failed:', error.message);
-      process.exit(1); // Fail fast — the app cannot run without a database.
+    } catch (primaryError) {
+      console.error('[Database Singleton] Primary connection failed:', primaryError.message);
+
+      if (!fallbackUri) {
+        process.exit(1);
+      }
+
+      try {
+        this._connection = await mongoose.connect(fallbackUri, connectOptions);
+        this._isConnected = true;
+        attachConnectionListeners();
+        console.log('[Database Singleton] MongoDB connected successfully (fallback URI).');
+        return this._connection;
+      } catch (fallbackError) {
+        console.error('[Database Singleton] Fallback connection failed:', fallbackError.message);
+        process.exit(1); // Fail fast — the app cannot run without a database.
+      }
     }
   }
 

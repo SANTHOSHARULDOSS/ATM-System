@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: santhosh-bank-atm
+    runtime: node
+    rootDir: bank-atm-portal
+    plan: free
+    autoDeploy: true
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_DB_NAME
+        value: atm_system_db
+      - key: ENABLE_LOCAL_FALLBACK
+        value: "false"
+      - key: JWT_EXPIRES_IN
+        value: 2m
