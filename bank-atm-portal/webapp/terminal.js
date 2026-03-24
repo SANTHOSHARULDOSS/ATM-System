@@ -46,6 +46,13 @@ const I18N = {
     changePin: 'Change PIN',
     biometric: 'Biometric Security',
     exit: 'Exit / Eject Card',
+    changeLanguage: 'Change Language',
+    chooseLanguage: 'Choose Language',
+    chooseLanguageHint: 'Please select your preferred language.',
+    voiceOn: 'Voice ON',
+    voiceOff: 'Voice OFF',
+    welcomeVoice: 'Welcome to SANTHOSH BANK ATM. Please enter your sixteen-digit card number.',
+    menuVoice: 'Main menu loaded. Choose your banking service.',
   },
   TA: {
     welcomeTitle: 'வரவேற்கிறோம்',
@@ -64,6 +71,13 @@ const I18N = {
     changePin: 'PIN மாற்றம்',
     biometric: 'பயோமெட்ரிக் பாதுகாப்பு',
     exit: 'வெளியேறு / அட்டை எடு',
+    changeLanguage: 'மொழியை மாற்று',
+    chooseLanguage: 'மொழியைத் தேர்வு செய்க',
+    chooseLanguageHint: 'தயவுசெய்து உங்கள் மொழியை தேர்வு செய்யவும்.',
+    voiceOn: 'ஒலி செயல்படுத்தப்பட்டது',
+    voiceOff: 'ஒலி நிறுத்தப்பட்டது',
+    welcomeVoice: 'சந்தோஷ் வங்கி ஏடிஎம்-க்கு வரவேற்கிறோம். உங்கள் பதினாறு இலக்க அட்டை எண்ணை உள்ளிடவும்.',
+    menuVoice: 'முதன்மை மெனு தயார். வங்கி சேவையை தேர்வு செய்யவும்.',
   },
   HI: {
     welcomeTitle: 'स्वागत है',
@@ -82,6 +96,13 @@ const I18N = {
     changePin: 'PIN बदलें',
     biometric: 'बायोमेट्रिक सुरक्षा',
     exit: 'बाहर निकलें / कार्ड निकालें',
+    changeLanguage: 'भाषा बदलें',
+    chooseLanguage: 'भाषा चुनें',
+    chooseLanguageHint: 'कृपया अपनी पसंदीदा भाषा चुनें।',
+    voiceOn: 'आवाज चालू',
+    voiceOff: 'आवाज बंद',
+    welcomeVoice: 'संतोष बैंक एटीएम में आपका स्वागत है। कृपया अपना 16 अंकों का कार्ड नंबर दर्ज करें।',
+    menuVoice: 'मुख्य मेनू तैयार है। अपनी बैंकिंग सेवा चुनें।',
   },
 };
 
@@ -126,11 +147,48 @@ const APIClient = {
    ═══════════════════════════════════════════════════════════ */
 
 const ViewManager = {
+  _history: ['language'],
+
   /** Shows the target view and hides all others. */
-  show(viewId) {
+  show(viewId, options = {}) {
+    const { pushHistory = true } = options;
     document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
     const target = document.getElementById(`view-${viewId}`);
     if (target) target.classList.add('active');
+
+    if (pushHistory) {
+      const current = this._history[this._history.length - 1];
+      if (current !== viewId) this._history.push(viewId);
+    }
+    this._syncBackButton();
+
+    if (typeof ATMTerminal !== 'undefined' && ATMTerminal && typeof ATMTerminal._announceView === 'function') {
+      ATMTerminal._announceView(viewId);
+    }
+  },
+
+  reset(viewId = 'language') {
+    this._history = [viewId];
+    this.show(viewId, { pushHistory: false });
+  },
+
+  goBack() {
+    if (this._history.length <= 1) return;
+    this._history.pop();
+    const previous = this._history[this._history.length - 1] || 'language';
+    this.show(previous, { pushHistory: false });
+  },
+
+  _syncBackButton() {
+    const btn = document.getElementById('btnGlobalBack');
+    if (!btn) return;
+
+    const active = document.querySelector('.view.active');
+    const activeId = active ? active.id : '';
+    const rootViews = new Set(['view-language', 'view-welcome']);
+    const shouldHide = rootViews.has(activeId) || this._history.length <= 1;
+
+    btn.classList.toggle('hidden', shouldHide);
   },
 };
 
@@ -223,15 +281,20 @@ const ATMTerminal = {
   accountType: null,
   balance:     null,
   language: null,
+  voiceEnabled: localStorage.getItem('atmVoiceAssist') === 'on',
   theme: localStorage.getItem('atmTheme') || 'dark',
+  layoutMode: localStorage.getItem('atmLayoutMode') || 'tile',
+  uiZoom: parseInt(localStorage.getItem('atmUiZoom') || '100', 10),
   _indiaClockInterval: null,
   _adsInterval: null,
   _adsIndex: 0,
   _ads: [
     'SANTHOSH BANK ATM - Safe Banking, Smart Future.',
-    'Open a Savings Account Today with SANTHOSH BANK ATM.',
-    'Use Biometric Security for Safer ATM Transactions.',
-    'SANTHOSH BANK ATM - Trusted Local Banking Since 2026.',
+    'Gold Rate Today: 24K Rs. 7,420/g | 22K Rs. 6,805/g.',
+    'Festival Offer: Zero charges on first 3 transfers this month.',
+    'Fixed Deposit Special: Up to 8.10% p.a. for senior citizens.',
+    'Home Loan Week: Interest rates starting at 8.35% p.a.',
+    'Use Biometric Security for safer ATM transactions.',
   ],
 
   // Tracks which transaction type the amount view is handling.
@@ -241,10 +304,17 @@ const ATMTerminal = {
   init() {
     this._bindThemeSwitcher();
     this._applyTheme(this.theme);
+    this._bindLayoutZoomControls();
+    this._applyMenuLayout(this.layoutMode);
+    this._applyZoom(this.uiZoom);
+    this._bindGlobalNavigation();
+    this._bindVoiceAssist();
+    this._refreshVoiceButton();
     this._bindLanguagePicker();
     this._applyLayoutMode();
     this._startIndiaClock();
     this._startAdRotation();
+    this._startOffersTicker();
     window.addEventListener('resize', () => this._applyLayoutMode());
 
     this._bindCardInput();
@@ -260,7 +330,103 @@ const ATMTerminal = {
     this._bindStatementView();
     this._bindResultButtons();
 
-    ViewManager.show('language');
+    ViewManager.reset('language');
+  },
+
+  _bindGlobalNavigation() {
+    const btn = document.getElementById('btnGlobalBack');
+    if (!btn) return;
+    btn.addEventListener('click', () => ViewManager.goBack());
+    ViewManager._syncBackButton();
+  },
+
+  _bindVoiceAssist() {
+    const btn = document.getElementById('btnVoiceAssist');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+      this.voiceEnabled = !this.voiceEnabled;
+      localStorage.setItem('atmVoiceAssist', this.voiceEnabled ? 'on' : 'off');
+      this._refreshVoiceButton();
+
+      const t = I18N[this.language] || I18N.EN;
+      const msg = this.voiceEnabled ? t.voiceOn : t.voiceOff;
+      ToastManager.show(msg, this.voiceEnabled ? 'success' : 'warn');
+      if (this.voiceEnabled) this._speak(msg);
+    });
+  },
+
+  _refreshVoiceButton() {
+    const btn = document.getElementById('btnVoiceAssist');
+    if (!btn) return;
+    const t = I18N[this.language] || I18N.EN;
+    btn.textContent = this.voiceEnabled ? t.voiceOn : t.voiceOff;
+    btn.classList.toggle('active', this.voiceEnabled);
+  },
+
+  _bindLayoutZoomControls() {
+    const layoutSelect = document.getElementById('layoutModeSelect');
+    const tileBtn = document.getElementById('btnMenuTile');
+    const gridBtn = document.getElementById('btnMenuGrid');
+    const zoomOutBtn = document.getElementById('btnZoomOut');
+    const zoomInBtn = document.getElementById('btnZoomIn');
+
+    if (layoutSelect) {
+      layoutSelect.value = this.layoutMode;
+      layoutSelect.addEventListener('change', (e) => {
+        this._applyMenuLayout(e.target.value);
+      });
+    }
+
+    if (tileBtn) {
+      tileBtn.addEventListener('click', () => this._applyMenuLayout('tile'));
+    }
+
+    if (gridBtn) {
+      gridBtn.addEventListener('click', () => this._applyMenuLayout('grid'));
+    }
+
+    if (zoomOutBtn) {
+      zoomOutBtn.addEventListener('click', () => {
+        this._applyZoom(this.uiZoom - 5);
+      });
+    }
+
+    if (zoomInBtn) {
+      zoomInBtn.addEventListener('click', () => {
+        this._applyZoom(this.uiZoom + 5);
+      });
+    }
+  },
+
+  _applyMenuLayout(mode) {
+    const normalized = mode === 'grid' ? 'grid' : 'tile';
+    this.layoutMode = normalized;
+    localStorage.setItem('atmLayoutMode', normalized);
+
+    const grid = document.querySelector('#view-menu .menu-grid');
+    if (grid) {
+      grid.classList.remove('layout-grid', 'layout-tile');
+      grid.classList.add(normalized === 'grid' ? 'layout-grid' : 'layout-tile');
+    }
+
+    const layoutSelect = document.getElementById('layoutModeSelect');
+    if (layoutSelect && layoutSelect.value !== normalized) layoutSelect.value = normalized;
+
+    const tileBtn = document.getElementById('btnMenuTile');
+    const gridBtn = document.getElementById('btnMenuGrid');
+    if (tileBtn) tileBtn.classList.toggle('active', normalized === 'tile');
+    if (gridBtn) gridBtn.classList.toggle('active', normalized === 'grid');
+  },
+
+  _applyZoom(value) {
+    const clamped = Math.max(80, Math.min(130, parseInt(value, 10) || 100));
+    this.uiZoom = clamped;
+    localStorage.setItem('atmUiZoom', String(clamped));
+    document.documentElement.style.setProperty('--ui-scale', String(clamped / 100));
+
+    const zoomLabel = document.getElementById('zoomLevel');
+    if (zoomLabel) zoomLabel.textContent = `${clamped}%`;
   },
 
   _bindThemeSwitcher() {
@@ -302,6 +468,8 @@ const ATMTerminal = {
       el.addEventListener('click', () => {
         this._setLanguage(lang);
         ViewManager.show('welcome');
+        const t = I18N[lang] || I18N.EN;
+        this._speak(t.welcomeVoice);
       });
     };
     bind('btnLangEnglish', 'EN');
@@ -318,6 +486,8 @@ const ATMTerminal = {
       if (el) el.textContent = value;
     };
 
+    setText('#view-language .screen-title', t.chooseLanguage);
+    setText('#view-language .screen-subtitle', t.chooseLanguageHint);
     setText('#view-welcome .screen-title', t.welcomeTitle);
     setText('#view-welcome .screen-subtitle', t.welcomeSubtitle);
     setText('#btnInsertCard', t.insertCard);
@@ -333,8 +503,9 @@ const ATMTerminal = {
     setText('#btnCheckDeposit span:last-child', t.checkDeposit);
     setText('#btnChangePin span:last-child', t.changePin);
     setText('#btnBiometric span:last-child', t.biometric);
-    setText('#btnMenuLanguage span:last-child', 'Change Language');
+    setText('#btnMenuLanguage span:last-child', t.changeLanguage);
     setText('#btnExit span:last-child', t.exit);
+    this._refreshVoiceButton();
   },
 
   _goToLanguageSelection() {
@@ -342,7 +513,35 @@ const ATMTerminal = {
     this.cardNumber = null;
     this._pinValue = '';
     this._updatePinDots(0);
-    ViewManager.show('language');
+    ViewManager.reset('language');
+  },
+
+  _announceView(viewId) {
+    if (!this.voiceEnabled) return;
+    const t = I18N[this.language] || I18N.EN;
+
+    if (viewId === 'menu') this._speak(t.menuVoice);
+    if (viewId === 'welcome') this._speak(t.welcomeVoice);
+    if (viewId === 'language') this._speak(t.chooseLanguageHint);
+  },
+
+  _speak(text) {
+    if (!this.voiceEnabled || !text || !('speechSynthesis' in window)) return;
+
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+
+      if (this.language === 'TA') utterance.lang = 'ta-IN';
+      else if (this.language === 'HI') utterance.lang = 'hi-IN';
+      else utterance.lang = 'en-IN';
+
+      window.speechSynthesis.speak(utterance);
+    } catch (_) {
+      // Voice support can vary by browser/platform, so fail silently.
+    }
   },
 
   _startIndiaClock() {
@@ -386,6 +585,19 @@ const ATMTerminal = {
     rotate();
     if (this._adsInterval) clearInterval(this._adsInterval);
     this._adsInterval = setInterval(rotate, 5000);
+  },
+
+  _startOffersTicker() {
+    const banner = document.getElementById('loginOffersBanner');
+    if (!banner) return;
+    banner.scrollLeft = 0;
+
+    setInterval(() => {
+      if (banner.scrollWidth <= banner.clientWidth) return;
+      const next = banner.scrollLeft + 110;
+      const max = banner.scrollWidth - banner.clientWidth;
+      banner.scrollTo({ left: next >= max ? 0 : next, behavior: 'smooth' });
+    }, 3200);
   },
 
   /* ── Session Management ───────────────────────────────── */
@@ -894,7 +1106,7 @@ const ATMTerminal = {
     if (btnCancel) {
       btnCancel.addEventListener('click', () => {
         ViewManager.show('menu');
-        ToastManager.show('Biometric verification cancelled.', 'warning');
+        ToastManager.show('Biometric verification cancelled.', 'warn');
       });
     }
   },

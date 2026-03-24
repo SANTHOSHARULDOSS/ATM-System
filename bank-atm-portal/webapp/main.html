@@ -34,6 +34,23 @@
     <!-- ── SCREEN ───────────────────────────────────────────── -->
     <main class="atm-screen" id="atmScreen">
 
+      <div class="screen-toolbar" id="screenToolbar">
+        <button class="toolbar-btn toolbar-nav" id="btnGlobalBack" type="button" title="Back">← Back</button>
+        <div class="toolbar-group">
+          <label for="layoutModeSelect">Layout</label>
+          <select id="layoutModeSelect" class="toolbar-select">
+            <option value="grid">Grid</option>
+            <option value="tile">Tile</option>
+          </select>
+        </div>
+        <button class="toolbar-btn toolbar-voice" id="btnVoiceAssist" type="button" title="Voice Assistance">Voice OFF</button>
+        <div class="toolbar-group toolbar-zoom">
+          <button class="toolbar-btn" id="btnZoomOut" type="button" title="Zoom Out">-</button>
+          <span class="toolbar-zoom-level" id="zoomLevel">100%</span>
+          <button class="toolbar-btn" id="btnZoomIn" type="button" title="Zoom In">+</button>
+        </div>
+      </div>
+
       <!-- SESSION TIMER (visible after login) -->
       <div class="session-timer hidden" id="sessionTimer">
         <span>Session: </span><span id="timerDisplay">02:00</span>
@@ -56,6 +73,12 @@
 
       <section class="view" id="view-welcome">
         <div class="welcome-content">
+          <div class="login-offers-banner" id="loginOffersBanner">
+            <span class="offer-pill">24K Gold 1g: Rs. 7,420</span>
+            <span class="offer-pill">FD: Up to 8.10% p.a.</span>
+            <span class="offer-pill">Home Loan: From 8.35%</span>
+          </div>
+
           <div class="atm-animation">
             <div class="card-slot-visual">
               <div class="card-graphic" id="cardGraphic">
@@ -64,6 +87,12 @@
               </div>
             </div>
           </div>
+
+          <div class="voice-help-card" id="voiceHelpCard">
+            <strong>Accessibility Help</strong>
+            <p>Turn on Voice Assistance from the top bar to hear instructions in English, Tamil, or Hindi.</p>
+          </div>
+
           <h1 class="screen-title">Welcome</h1>
           <p class="screen-subtitle">Please enter your 16-digit card number to begin.</p>
           <div class="input-group">
@@ -139,6 +168,11 @@
             <span class="account-type-badge" id="accountTypeBadge">SAVINGS</span>
           </div>
           <h2 class="menu-title">How can we help you today?</h2>
+          <div class="menu-layout-switch" id="menuLayoutSwitch">
+            <span class="layout-switch-label">View</span>
+            <button class="layout-chip" id="btnMenuTile" type="button">Tile</button>
+            <button class="layout-chip" id="btnMenuGrid" type="button">Grid</button>
+          </div>
           <div class="menu-grid">
             <button class="menu-btn" id="btnBalance">
               <span class="menu-icon">💰</span>
