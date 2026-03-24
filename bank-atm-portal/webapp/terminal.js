@@ -233,6 +233,11 @@ const SessionTimer = {
     if (this._interval) this.start(120);
   },
 
+  addSeconds(extra = 60) {
+    if (!this._interval) return;
+    this._seconds += Math.max(0, parseInt(extra, 10) || 0);
+  },
+
   clear() {
     if (this._interval) { clearInterval(this._interval); this._interval = null; }
     const timerEl = document.getElementById('sessionTimer');
@@ -288,6 +293,7 @@ const ATMTerminal = {
   _indiaClockInterval: null,
   _adsInterval: null,
   _adsIndex: 0,
+  _voices: [],
   _ads: [
     'SANTHOSH BANK ATM - Safe Banking, Smart Future.',
     'Gold Rate Today: 24K Rs. 7,420/g | 22K Rs. 6,805/g.',
@@ -318,6 +324,7 @@ const ATMTerminal = {
     window.addEventListener('resize', () => this._applyLayoutMode());
 
     this._bindCardInput();
+    this._bindForgotView();
     this._bindPinKeypad();
     this._bindMenuButtons();
     this._bindAmountView();
@@ -343,6 +350,13 @@ const ATMTerminal = {
   _bindVoiceAssist() {
     const btn = document.getElementById('btnVoiceAssist');
     if (!btn) return;
+
+    this._voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    if (window.speechSynthesis) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        this._voices = window.speechSynthesis.getVoices();
+      };
+    }
 
     btn.addEventListener('click', () => {
       this.voiceEnabled = !this.voiceEnabled;
@@ -538,6 +552,12 @@ const ATMTerminal = {
       else if (this.language === 'HI') utterance.lang = 'hi-IN';
       else utterance.lang = 'en-IN';
 
+      const voices = this._voices.length ? this._voices : window.speechSynthesis.getVoices();
+      const desiredToken = this.language === 'TA' ? 'ta' : this.language === 'HI' ? 'hi' : 'en';
+      const languageVoice = voices.find((v) => (v.lang || '').toLowerCase().includes(desiredToken));
+      const nameVoice = voices.find((v) => (v.name || '').toLowerCase().includes(desiredToken));
+      utterance.voice = languageVoice || nameVoice || null;
+
       window.speechSynthesis.speak(utterance);
     } catch (_) {
       // Voice support can vary by browser/platform, so fail silently.
@@ -615,6 +635,8 @@ const ATMTerminal = {
 
     SessionTimer.start(120);
     ViewManager.show('menu');
+    this._playTonePattern([880, 1100]);
+    this._speak('Login successful. Welcome to SANTHOSH BANK ATM.');
   },
 
   logout() {
@@ -657,6 +679,13 @@ const ATMTerminal = {
     document.getElementById('btnGoRegister').addEventListener('click', () => {
       ViewManager.show('register');
     });
+
+    const forgotBtn = document.getElementById('btnForgotAccess');
+    if (forgotBtn) {
+      forgotBtn.addEventListener('click', () => {
+        ViewManager.show('forgot');
+      });
+    }
 
     const changeLangBtn = document.getElementById('btnChangeLanguage');
     if (changeLangBtn) {
@@ -774,7 +803,91 @@ const ATMTerminal = {
 
     for (const [id, fn] of Object.entries(actions)) {
       const el = document.getElementById(id);
-      if (el) el.addEventListener('click', () => { fn(); });
+      if (el) {
+        el.addEventListener('click', () => {
+          if (this.token && id !== 'btnExit') SessionTimer.addSeconds(60);
+          fn();
+        });
+      }
+    }
+  },
+
+  _bindForgotView() {
+    const purposeSelect = document.getElementById('forgotPurpose');
+    const newPinGroup = document.getElementById('forgotNewPinGroup');
+    const requestBtn = document.getElementById('btnRequestOtp');
+    const verifyBtn = document.getElementById('btnVerifyOtp');
+    const cancelBtn = document.getElementById('btnCancelForgot');
+
+    if (purposeSelect && newPinGroup) {
+      const togglePin = () => {
+        newPinGroup.classList.toggle('hidden', purposeSelect.value !== 'RESET_PIN');
+      };
+      purposeSelect.addEventListener('change', togglePin);
+      togglePin();
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => ViewManager.show('welcome'));
+    }
+
+    if (requestBtn) {
+      requestBtn.addEventListener('click', async () => {
+        const email = document.getElementById('forgotEmail').value.trim();
+        const phoneNumber = document.getElementById('forgotPhone').value.trim();
+        const purpose = document.getElementById('forgotPurpose').value;
+
+        if (!email || !phoneNumber) {
+          ToastManager.show('Email and phone number are required.', 'error');
+          return;
+        }
+
+        try {
+          const res = await APIClient.post('/auth/otp/request', { email, phoneNumber, purpose });
+          const demoOtp = res.data?.demoOtp ? ` Demo OTP: ${res.data.demoOtp}` : '';
+          ToastManager.show(`${res.message}.${demoOtp}`, 'success');
+        } catch (err) {
+          ToastManager.show(err.message, 'error');
+        }
+      });
+    }
+
+    if (verifyBtn) {
+      verifyBtn.addEventListener('click', async () => {
+        const email = document.getElementById('forgotEmail').value.trim();
+        const phoneNumber = document.getElementById('forgotPhone').value.trim();
+        const purpose = document.getElementById('forgotPurpose').value;
+        const otp = document.getElementById('forgotOtp').value.trim();
+        const newPin = document.getElementById('forgotNewPin')?.value;
+
+        if (!email || !phoneNumber || !otp) {
+          ToastManager.show('Email, phone number and OTP are required.', 'error');
+          return;
+        }
+
+        if (purpose === 'RESET_PIN' && !/^\d{4,6}$/.test(String(newPin || ''))) {
+          ToastManager.show('Enter a valid new PIN (4 to 6 digits).', 'error');
+          return;
+        }
+
+        try {
+          const payload = { email, phoneNumber, purpose, otp };
+          if (purpose === 'RESET_PIN') payload.newPin = newPin;
+
+          const res = await APIClient.post('/auth/otp/verify', payload);
+          if (purpose === 'RECOVER_CARD') {
+            this._showResult('✓', 'Card Recovered',
+              `Card Number  : ${res.data.cardNumber}\nHolder Name : ${res.data.holderName}\nAccount Type: ${res.data.accountType}`
+            );
+          } else {
+            this._showResult('✓', 'PIN Reset Complete',
+              `Card Number  : ${res.data.cardNumber}\nStatus       : PIN updated successfully.\n\nPlease login using your new PIN.`
+            );
+          }
+        } catch (err) {
+          ToastManager.show(err.message, 'error');
+        }
+      });
     }
   },
 
@@ -855,6 +968,8 @@ const ATMTerminal = {
       if (action === 'WITHDRAWAL') {
         res = await APIClient.post('/transactions/withdraw', { amount: amountRaw }, this.token);
         this.balance = res.data.newBalance;
+        this._playTonePattern([1200, 1000, 800]);
+        this._speak('Transaction successful. Please collect your cash and card.');
         this._showResult('✓', 'Withdrawal Successful',
           `Amount Dispensed : $${amountRaw.toFixed(2)}\nNew Balance      : $${res.data.newBalance.toFixed(2)}\nTransaction ID   : ${res.data.transactionId}\n\nPlease collect your cash.`
         );
@@ -862,6 +977,8 @@ const ATMTerminal = {
       } else if (action === 'DEPOSIT') {
         res = await APIClient.post('/transactions/deposit', { amount: amountRaw }, this.token);
         this.balance = res.data.newBalance;
+        this._playTonePattern([900, 1100]);
+        this._speak('Transaction successful. Please collect your card.');
         this._showResult('✓', 'Deposit Successful',
           `Amount Deposited : $${amountRaw.toFixed(2)}\nNew Balance      : $${res.data.newBalance.toFixed(2)}\nTransaction ID   : ${res.data.transactionId}`
         );
@@ -875,6 +992,8 @@ const ATMTerminal = {
         res = await APIClient.post('/transactions/transfer',
           { amount: amountRaw, targetCardNumber: targetRaw }, this.token);
         this.balance = res.data.newBalance;
+        this._playTonePattern([900, 1100]);
+        this._speak('Transfer successful. Please collect your card.');
         this._showResult('✓', 'Transfer Successful',
           `Amount Sent      : $${amountRaw.toFixed(2)}\nRecipient Card   : •••• •••• •••• ${targetRaw.slice(-4)}\nNew Balance      : $${res.data.newBalance.toFixed(2)}\nTransaction ID   : ${res.data.transactionId}`
         );
@@ -883,6 +1002,8 @@ const ATMTerminal = {
         const desc = document.getElementById('checkDescInput').value;
         res = await APIClient.post('/transactions/check-deposit',
           { amount: amountRaw, description: desc }, this.token);
+        this._playTonePattern([900, 1100]);
+        this._speak('Check submitted successfully. Please collect your card.');
         this._showResult('⏳', 'Check Submitted (Pending)',
           `Check Amount     : $${amountRaw.toFixed(2)}\nStatus           : PENDING CLEARANCE\nTransaction ID   : ${res.data.transactionId}\n\nFunds available within 1-2 business days.`
         );
@@ -1127,8 +1248,39 @@ const ATMTerminal = {
   _bindResultButtons() {
     document.getElementById('btnResultBack').addEventListener('click', () =>
       ViewManager.show('menu'));
-    document.getElementById('btnResultExit').addEventListener('click', () =>
-      this.logout());
+    document.getElementById('btnResultExit').addEventListener('click', () => {
+      this._playTonePattern([700, 500]);
+      this._speak('Thank you for banking with SANTHOSH BANK ATM. Please collect your card.');
+      this.logout();
+    });
+  },
+
+  _playTonePattern(freqs) {
+    if (!Array.isArray(freqs) || !freqs.length) return;
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      let start = ctx.currentTime;
+
+      freqs.forEach((freq) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.exponentialRampToValueAtTime(0.08, start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.13);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + 0.14);
+        start += 0.16;
+      });
+    } catch (_) {
+      // Ignore audio errors on unsupported devices.
+    }
   },
 
   /* ── Admin Portal ─────────────────────────────────────── */

@@ -31,6 +31,17 @@ const { TransactionDAO } = require('./schemas/Transaction');
 const { AuditLogDAO }    = require('./schemas/AuditLog');
 const { issueToken, issueAdminToken, issueMaintenanceToken } = require('./authentication');
 
+// In-memory OTP store for demo workflows (resets on server restart).
+const otpStore = new Map();
+
+function otpKey(email, phoneNumber, purpose) {
+  return `${String(email).toLowerCase()}|${String(phoneNumber).replace(/\D/g, '')}|${purpose}`;
+}
+
+function generateOtpCode() {
+  return String(100000 + Math.floor(Math.random() * 900000));
+}
+
 /* ═══════════════════════════════════════════════════════════
    SECTION 1 — SINGLETON: ATMMachine
    ═══════════════════════════════════════════════════════════
@@ -1498,6 +1509,163 @@ const resetPinWithPhone = async (req, res, next) => {
 };
 
 /**
+ * requestOtpForRecovery
+ * Demo OTP generation endpoint for forgotten card/PIN workflows.
+ */
+const requestOtpForRecovery = async (req, res, next) => {
+  try {
+    const { email, phoneNumber, purpose } = req.body;
+    const allowedPurpose = ['RECOVER_CARD', 'RESET_PIN'];
+    const normalizedPurpose = String(purpose || '').toUpperCase();
+
+    if (!allowedPurpose.includes(normalizedPurpose)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Purpose must be RECOVER_CARD or RESET_PIN.',
+      });
+    }
+
+    const normalizedPhone = String(phoneNumber || '').replace(/\D/g, '');
+    const card = await CardDAO.findByEmail(email);
+
+    if (!card || card.phoneNumber.replace(/\D/g, '') !== normalizedPhone) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found matching the provided email and phone number.',
+      });
+    }
+
+    const code = generateOtpCode();
+    const key = otpKey(email, normalizedPhone, normalizedPurpose);
+    otpStore.set(key, {
+      code,
+      expiresAt: Date.now() + 5 * 60 * 1000,
+      triesLeft: 5,
+      cardNumber: card.cardNumber,
+    });
+
+    await transactionSubject.notify('OTP_REQUESTED', {
+      cardNumber: card.cardNumber,
+      email,
+      purpose: normalizedPurpose,
+      ipAddress: req.ip,
+      severity: 'INFO',
+    });
+
+    const response = {
+      success: true,
+      message: `OTP generated for ${normalizedPurpose}. Valid for 5 minutes.`,
+    };
+
+    // For demo usage, reveal OTP in non-production environments.
+    if (process.env.NODE_ENV !== 'production') {
+      response.data = { demoOtp: code };
+    }
+
+    res.json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * verifyOtpForRecovery
+ * Verifies OTP and completes card recovery or PIN reset action.
+ */
+const verifyOtpForRecovery = async (req, res, next) => {
+  try {
+    const { email, phoneNumber, purpose, otp, newPin } = req.body;
+    const normalizedPurpose = String(purpose || '').toUpperCase();
+    const normalizedPhone = String(phoneNumber || '').replace(/\D/g, '');
+    const key = otpKey(email, normalizedPhone, normalizedPurpose);
+    const entry = otpStore.get(key);
+
+    if (!entry) {
+      return res.status(404).json({
+        success: false,
+        message: 'No OTP found. Please request a new OTP.',
+      });
+    }
+
+    if (Date.now() > entry.expiresAt) {
+      otpStore.delete(key);
+      return res.status(410).json({
+        success: false,
+        message: 'OTP has expired. Please request a new OTP.',
+      });
+    }
+
+    if (String(otp || '') !== entry.code) {
+      entry.triesLeft -= 1;
+      if (entry.triesLeft <= 0) otpStore.delete(key);
+      return res.status(403).json({
+        success: false,
+        message: entry.triesLeft > 0 ? `Invalid OTP. ${entry.triesLeft} attempt(s) left.` : 'OTP attempts exceeded. Request a new OTP.',
+      });
+    }
+
+    const card = await CardDAO.findByEmail(email);
+    if (!card || card.phoneNumber.replace(/\D/g, '') !== normalizedPhone) {
+      otpStore.delete(key);
+      return res.status(404).json({
+        success: false,
+        message: 'No account found matching the provided email and phone number.',
+      });
+    }
+
+    otpStore.delete(key);
+
+    if (normalizedPurpose === 'RECOVER_CARD') {
+      await transactionSubject.notify('CARD_RECOVERY_OTP_VERIFIED', {
+        cardNumber: card.cardNumber,
+        email,
+        ipAddress: req.ip,
+        severity: 'INFO',
+      });
+
+      return res.json({
+        success: true,
+        message: 'OTP verified. Card details recovered successfully.',
+        data: {
+          cardNumber: card.cardNumber,
+          holderName: card.holderName,
+          accountType: card.accountType,
+        },
+      });
+    }
+
+    if (!/^\d{4,6}$/.test(String(newPin || ''))) {
+      return res.status(400).json({
+        success: false,
+        message: 'New PIN must be 4 to 6 digits.',
+      });
+    }
+
+    const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 12;
+    const pinHash = await bcrypt.hash(String(newPin), saltRounds);
+    await CardDAO.update(card.cardNumber, { pinHash });
+
+    await transactionSubject.notify('PIN_RESET_OTP_VERIFIED', {
+      cardNumber: card.cardNumber,
+      email,
+      ipAddress: req.ip,
+      severity: 'WARNING',
+    });
+
+    return res.json({
+      success: true,
+      message: 'OTP verified. PIN reset successfully.',
+      data: {
+        cardNumber: card.cardNumber,
+        email: card.email,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * setupBiometric
  * Allow authenticated user to enable biometric verification (fingerprint or face).
  */
@@ -1649,6 +1817,8 @@ module.exports = {
   adminLogin,
   recoverCardNumber,
   resetPinWithPhone,
+  requestOtpForRecovery,
+  verifyOtpForRecovery,
   // Biometric
   setupBiometric,
   verifyBiometric,

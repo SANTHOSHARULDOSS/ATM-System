@@ -1,4 +1,4 @@
-const CACHE_NAME = 'atm-pwa-v2';
+const CACHE_NAME = 'atm-pwa-v3';
 const ASSETS = [
   '/',
   '/main.html',

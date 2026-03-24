@@ -519,6 +519,34 @@ body {
   line-height: 1.4;
 }
 
+.support-card {
+  width: 100%;
+  margin-top: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(0, 210, 106, 0.3);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 210, 106, 0.08);
+  text-align: left;
+}
+
+.support-card h3 {
+  font-size: 0.7rem;
+  margin-bottom: 0.2rem;
+  color: #b3ffda;
+}
+
+.support-card p {
+  font-size: 0.64rem;
+  color: var(--clr-text);
+  margin: 0.08rem 0;
+}
+
+.support-note {
+  font-size: 0.62rem;
+  color: var(--clr-text-dim);
+  line-height: 1.45;
+}
+
 .atm-animation { margin-bottom: 1rem; }
 
 .card-slot-visual {

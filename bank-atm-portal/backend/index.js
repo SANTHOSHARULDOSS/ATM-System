@@ -33,6 +33,7 @@ const { errorHandler, verifyToken, verifyAdmin, verifyMaintenance, validateInput
 const {
   registerCard, loginWithPin, adminLogin,
   recoverCardNumber, resetPinWithPhone,
+  requestOtpForRecovery, verifyOtpForRecovery,
   setupBiometric, verifyBiometric, disableBiometric,
   maintenanceLogin, maintenanceDiagnostics, maintenanceUpdateStatus, maintenanceToggleService, maintenanceErrorLogs,
   getBalance, getMiniStatement, changePin,
@@ -165,6 +166,36 @@ router.post(
     newPin:      (v) => /^\d{4,6}$/.test(String(v)),
   }),
   resetPinWithPhone
+);
+
+/**
+ * POST /api/auth/otp/request
+ * Body: { email, phoneNumber, purpose }
+ * purpose: RECOVER_CARD | RESET_PIN
+ */
+router.post(
+  '/auth/otp/request',
+  validateInput({
+    email:       (v) => /^\S+@\S+\.\S+$/.test(v),
+    phoneNumber: (v) => /^\d{10,15}$/.test(String(v).replace(/\D/g, '')),
+    purpose:     (v) => ['RECOVER_CARD', 'RESET_PIN'].includes(String(v).toUpperCase()),
+  }),
+  requestOtpForRecovery
+);
+
+/**
+ * POST /api/auth/otp/verify
+ * Body: { email, phoneNumber, purpose, otp, newPin? }
+ */
+router.post(
+  '/auth/otp/verify',
+  validateInput({
+    email:       (v) => /^\S+@\S+\.\S+$/.test(v),
+    phoneNumber: (v) => /^\d{10,15}$/.test(String(v).replace(/\D/g, '')),
+    purpose:     (v) => ['RECOVER_CARD', 'RESET_PIN'].includes(String(v).toUpperCase()),
+    otp:         (v) => /^\d{6}$/.test(String(v)),
+  }),
+  verifyOtpForRecovery
 );
 
 // ── Protected Account Routes (require JWT) ───────────────────
