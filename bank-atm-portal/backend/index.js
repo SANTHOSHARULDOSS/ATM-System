@@ -405,18 +405,53 @@ app.use(errorHandler);
 /* ─────────────────────────────────────────────
    SERVER BOOT
    ───────────────────────────────────────────── */
+
+/**
+ * Global Process Error Handlers
+ * Catch unhandled promises and exceptions to prevent silent failures
+ */
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Process] Unhandled Rejection at:', promise, 'reason:', reason);
+  // Log to database/monitoring service in production
+  process.exit(1);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[Process] Uncaught Exception:', error);
+  // Log to database/monitoring service in production
+  process.exit(1);
+});
+
 const startServer = async () => {
   try {
     // Connect via the Database Singleton.
     await db.connect();
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log('╔═══════════════════════════════════════════╗');
       console.log('║        ATM SYSTEM — SERVER STARTED        ║');
       console.log('╠═══════════════════════════════════════════╣');
       console.log(`║  URL    : http://localhost:${PORT}            ║`);
       console.log(`║  Mode   : ${process.env.NODE_ENV || 'development'}                    ║`);
       console.log('╚═══════════════════════════════════════════╝');
+    });
+
+    // Graceful shutdown on SIGTERM (from container orchestration systems)
+    process.on('SIGTERM', async () => {
+      console.log('[Server] SIGTERM received, shutting down gracefully...');
+      server.close(async () => {
+        await db.disconnect();
+        process.exit(0);
+      });
+    });
+
+    // Graceful shutdown on SIGINT (Ctrl+C)
+    process.on('SIGINT', async () => {
+      console.log('[Server] SIGINT received, shutting down gracefully...');
+      server.close(async () => {
+        await db.disconnect();
+        process.exit(0);
+      });
     });
   } catch (err) {
     console.error('[Server] Failed to start:', err.message);

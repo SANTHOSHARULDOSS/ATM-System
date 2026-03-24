@@ -136,6 +136,19 @@ class Database {
   getReadyState() {
     return mongoose.connection.readyState;
   }
+
+  /**
+   * Gracefully disconnects from MongoDB.
+   * Used during server shutdown or in CI/CD environments.
+   * @returns {Promise<void>}
+   */
+  async disconnect() {
+    if (this._isConnected) {
+      await mongoose.disconnect();
+      this._isConnected = false;
+      console.log('[Database Singleton] MongoDB disconnected gracefully.');
+    }
+  }
 }
 
 // Note: Object.freeze() is intentionally NOT used here because the instance
