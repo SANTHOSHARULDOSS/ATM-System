@@ -1,4 +1,4 @@
-# SecureBank ATM System
+SANTHOSH BANK ATM (ATM_System)
 
 A production-grade ATM simulation built with Node.js, Express, and MongoDB.
 Demonstrates five core **Object-Oriented Software Engineering (OOSE)** design patterns.
